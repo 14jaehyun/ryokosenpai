@@ -34,6 +34,7 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 /* main */
 #touch{position:absolute;inset:0;z-index:1;touch-action:none}
 #char{position:absolute;right:2.4%;bottom:15.98%;width:58.63%;z-index:3;pointer-events:none;transition:opacity .7s linear}  /* fixed — from the layout pptx; her waist hides behind the dialog box */
+#char{-webkit-mask-image:linear-gradient(to bottom,#000 var(--fade,82%),transparent 100%);mask-image:linear-gradient(to bottom,#000 var(--fade,82%),transparent 100%)}  /* waist fades out behind the box: no cut line through it */
 #char img{width:100%;display:block;filter:drop-shadow(7px 6px 2px rgba(8,10,20,.5));image-rendering:auto}
 #char.pressed img{transform:translate(7px,6px);filter:none}
 #char.gone{opacity:0}
@@ -157,6 +158,8 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .left.soon{background:var(--amber)}
 .note{color:var(--beige);font-size:12px;margin:8px 4px 10px}
 .empty{color:var(--beige);font-size:12px;text-align:center;margin-top:60px;line-height:1.7}
+.stest{margin:28px 0 8px;opacity:.8}
+.stest .note{margin:0 2px 2px}
 #room .overlay .px{background:rgba(52,36,24,.96)}
 #room .overlay .px.gold{background:var(--gold)}
 #room .bottomBtn{background:var(--gold)}

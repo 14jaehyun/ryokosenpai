@@ -1,18 +1,18 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.18';
+const VERSION='2.0.20';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
 const DEFAULT_MODEL='gemini-3.5-flash-lite';
-const DEF={settings:{key:'',model:DEFAULT_MODEL,music:true},
+const DEF={settings:{key:'',model:DEFAULT_MODEL,music:true},user:{name:''},chat:{recent:[]},
   profile:{done:false,situations:[],interests:[],free:'',stats:{}},groups:[],passed:[],routes:[],lastLoc:null};
 let DB;
 function load(){try{DB=JSON.parse(localStorage.getItem(LS))||{}}catch(e){DB={}}
   DB=Object.assign(JSON.parse(JSON.stringify(DEF)),DB);
   DB.settings=Object.assign({},DEF.settings,DB.settings);delete DB.settings.links;
   if(!DB.settings.model)DB.settings.model=DEFAULT_MODEL;
-  DB.profile=Object.assign({},DEF.profile,DB.profile);
+  DB.profile=Object.assign({},DEF.profile,DB.profile);DB.user=Object.assign({},DEF.user,DB.user);if(!DB.chat||!Array.isArray(DB.chat.recent))DB.chat={recent:[]};
   if(!Array.isArray(DB.routes))DB.routes=[];
   ['lastLoc','manualLoc'].forEach(k=>{if(DB[k])DB[k].label='';});
   const now=Date.now();DB.passed=DB.passed.filter(p=>now-p.at<10*864e5);}
@@ -193,7 +193,7 @@ function say(html,{choices=null,cursor=true,active=false}={}){
   dlgWrap.classList.toggle('active',!!choices||active);
   if(choices)dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();choices[+b.dataset.i].fn();});
 }
-function sayIdle(){S.mode='idle';say('어디로 놀러 가볼까?<br>화면을 꾹 누른 채로 말해줘.<div class="hint">예) 저녁 먹고 시부야에서 놀 거리</div>');}
+function sayIdle(){S.mode='idle';say((DB.user.name&&Math.random()<0.5?esc(voc())+', ':'')+'어디로 놀러 가볼까?<br>화면을 꾹 누른 채로 말해줘.<div class="hint">예) 저녁 먹고 시부야에서 놀 거리</div>');}
 function showDlg(v){dlgWrap.classList.toggle('hidden',!v);}
 
 /* ---------- blush gimmick ---------- */
@@ -221,8 +221,8 @@ function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKi
   if(rec){try{rec.abort();}catch(e){}rec=null;}
   try{BGM.duck(true);startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}
   catch(e){try{startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;BGM.duck(false);return false;}}}
-function abortListen(){recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();}
-function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);ambientSession();res(heard);}};
+function abortListen(){const was=!!rec;recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();if(was)acStale=true;}
+function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);ambientSession();acStale=true;res(heard);}};  // next touch rebuilds the audio (mic leaves iOS on the quiet route)
   if(rec._ended)return fin();recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
 function typeInput(msg){S.mode='typing';
   say(esc(msg||'하고 싶은 걸 적어줘.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
@@ -259,6 +259,7 @@ function gotText(txt){
   if(/(음악|배경음|bgm)/i.test(txt)&&/(꺼|끄|멈|그만|조용)/.test(txt)){DB.settings.music=false;save();BGM.stop();ambientSession();say('음악 껐어.<div class="hint">"음악 켜줘"라고 하면 다시 틀게.</div>');S.mode='idle';return;}
   if(/(음악|배경음|bgm)/i.test(txt)&&/(켜|틀|다시)/.test(txt)){DB.settings.music=true;save();ambientSession();music();say('음악 다시 틀었어.');S.mode='idle';return;}
   if(/취향/.test(txt)&&/(다시|새로|바꿀|정할)/.test(txt)){startTutorial();return;}
+  if(/이름/.test(txt)&&/(바꿔|바꿀|바꾸|다시|새로)/.test(txt)){askName(sayIdle,'이름 바꾸고 싶어? 뭐라고 불러줄까?');return;}
   S.mode='confirm';
   say(`<span class="q">“${esc(txt)}”</span><br>이거 맞지?`,{choices:[{label:'응',fn:()=>startSearch(txt)},{label:'아니',fn:()=>{S.mode='idle';say('앗, 다시 말해줘.<br>화면을 꾹 누른 채로.');}}]});
 }
@@ -580,9 +581,8 @@ function legsOf(items){const pts=(S.loc?[{...S.loc,id:'here'}]:[]).concat(items)
 function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);let html='';let tw=0,tt=0;
   if(R.mode==='hist'){const e=R.entry;$('#routeTitle').textContent=`지난 동선 ${R.idx+1}/${DB.routes.length}`;
     const d=new Date(e.date);$('#routeMeta').textContent=`${d.getMonth()+1}월 ${d.getDate()}일${e.request?' · '+e.request:''}`;
-    const n=DB.routes.length;$('#routeDots').innerHTML=`<b class="arw${R.idx>0?'':' off'}" data-d="-1">◀</b>`+DB.routes.map((_,i)=>`<i class="${i===R.idx?'on':''}"></i>`).join('')+`<b class="arw${R.idx<n-1?'':' off'}" data-d="1">▶</b>`;
-    $('#routeDots').querySelectorAll('.arw').forEach(a=>a.onclick=()=>{const d=+a.dataset.d;if(a.classList.contains('off'))return;pageHist(R.idx+d,d);});}
-  else{$('#routeTitle').textContent='이동 순서';$('#routeMeta').textContent='카드를 끌어서 순서를 바꿀 수 있어.';$('#routeDots').innerHTML='';}
+    $('#routeDots').innerHTML=DB.routes.map((_,i)=>`<i class="${i===R.idx?'on':''}"></i>`).join('');}
+  else{$('#routeTitle').textContent='이동 순서';$('#routeMeta').textContent='카드를 끌어서 순서를 바꿀 수 있어. 아래로 당기면 닫혀.';$('#routeDots').innerHTML='';}
   if(S.loc)html+=`<div class="rstart gbox"><i></i>현재 위치</div>`;
   R.items.forEach((c,i)=>{const lg=S.loc?legs[i]:(i>0?legs[i-1]:null);
     if(lg){const d=lg.d;const ch=changed.has(lg.key);
@@ -628,7 +628,6 @@ function gmapsUrl(){const it=R.items;if(!it.length)return'#';const dest=it[it.le
   if(way.length){u+=`&waypoints=${way.map(c=>encodeURIComponent(searchText(c))).join('%7C')}`;if(allIds)u+=`&waypoint_place_ids=${way.map(c=>encodeURIComponent(c.placeId)).join('%7C')}`;}
   return u+'&travelmode=walking';}
 function finishRoute(){$('#route').classList.add('hidden');SCREEN='main';if(S.routeFrom==='cards'){backToIdle();music();}else{SCREEN='room';roomPins=[];renderRoom();music();}}
-$('#routeBack').onclick=()=>{SFX.btn();closeRoute();};
 function closeRoute(){if(R.mode==='hist'){stepFade($('#route'),1,()=>{$('#route').classList.add('hidden');$('#room').classList.remove('hidden');SCREEN='room';music();renderRoom();});return;}
   $('#route').classList.add('hidden');
   if(S.routeFrom==='cards'){SCREEN='main';music();S.mode='cards';charEl.classList.add('gone');charEl.classList.remove('front');$('#dimmer').classList.remove('on');showDlg(false);}
@@ -646,9 +645,9 @@ function startDrag(e,el){e.preventDefault();e.stopPropagation();audio();const bo
   el.onpointermove=move;el.onpointerup=el.onpointercancel=up;}
 /* history: drag left/right between saved routes (card follows finger), pull down to leave */
 (function(){const box=$('#rlist');let s=null,horiz=false;
-  box.addEventListener('touchstart',e=>{if(R.mode!=='hist'||e.target.closest('.h')||paging)return;s={x:e.touches[0].clientX,y:e.touches[0].clientY,top:box.scrollTop<=0,dx:0};horiz=false;box.style.transition='none';},{passive:true});
+  box.addEventListener('touchstart',e=>{if(e.target.closest('.h')||paging)return;s={x:e.touches[0].clientX,y:e.touches[0].clientY,top:box.scrollTop<=0,dx:0};horiz=false;box.style.transition='none';},{passive:true});
   box.addEventListener('touchmove',e=>{if(!s)return;const dx=e.touches[0].clientX-s.x,dy=e.touches[0].clientY-s.y;
-    if(!horiz&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.3)horiz=true;
+    if(!horiz&&R.mode==='hist'&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.3)horiz=true;
     if(horiz){const ni=R.idx+(dx<0?1:-1),edge=ni<0||ni>=DB.routes.length;const x=edge?dx*0.22:dx*0.9;s.dx=dx;
       box.style.transform=`translateX(${x}px) rotate(${x/90}deg)`;box.style.opacity=String(1-Math.min(Math.abs(x)/500,.45));}
     else if(dy>90&&s.top&&Math.abs(dy)>Math.abs(dx)){s=null;closeRoute();}},{passive:true});
@@ -692,6 +691,7 @@ function renderRoom(){const L=$('#roomList');$('#tabSaved').classList.toggle('on
         p.card._spark=true;g.cards.push(p.card);sparkleId=g.id;save();renderRoom();}});});
     if(sparkleId){$('#tabSaved').classList.add('ringgold');setTimeout(()=>$('#tabSaved').classList.remove('ringgold'),3000);}
   }
+  L.insertAdjacentHTML('beforeend',soundTestHTML());L.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{SFX.btn();soundTest(b.dataset.st);});
   updateRoomPins();}
 function updateRoomPins(){const all=allSaved();const pc=pinnedCards(all,roomPins);const L=$('#roomList');L.classList.toggle('showdist',pc.length>0&&roomTab==='saved');
   if(roomTab==='saved')L.querySelectorAll('.card').forEach(el=>{const c=all.find(x=>x.id===el.dataset.id);if(!c)return;const pinned=roomPins.includes(c.id);
@@ -743,9 +743,8 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     <div class="minibtns"><button class="px" id="sLocMap">구글맵에서 보기</button><button class="px" id="sLocPaste">구글맵 좌표 붙여넣기</button></div>
     <div class="sep"></div>
     <button class="chk ${music?'on':'off'}" id="sMusic" style="margin-top:0"><i></i>배경음악</button>
-    <div class="sep"></div><div class="row" style="margin-top:0">소리 실험</div>
-    <div class="small">다른 앱에 다녀와서 소리가 작아졌을 때 하나씩 눌러보고, 소리가 돌아오는 버튼을 알려줘.</div>
-    <div class="minibtns"><button class="px" data-st="A">A 재생 모드</button><button class="px" data-st="B">B 오디오 요소</button><button class="px" data-st="C">C 무음 재생</button></div>
+    <div class="sep"></div>
+    <div class="minibtns"><button class="px" id="sReset" style="color:var(--muted)">초기화…</button></div>
     <div class="btnrow"><button class="px gold" id="sSave">저장</button><button class="px" id="sClose" style="color:var(--muted)">닫기</button></div>
     <div class="small" style="text-align:center;margin-top:12px">여행선배 v${VERSION}</div></div></div>`;
   $('#overlayHost').appendChild(ov);showDlg(false);
@@ -769,15 +768,15 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
       box.querySelector('#cpNo').onclick=()=>{SFX.btn();box.remove();};
       box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어. 37.5, 127.0 같은 숫자를 넣어줘');return;}box.remove();setManual(p.lat,p.lng);};};
     const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
-  ov.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>soundTest(b.dataset.st));
+  ov.querySelector('#sReset').onclick=()=>{SFX.btn();openReset();};
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
   const keyIn=ov.querySelector('#sKey');
   ov.querySelector('#sPaste').onclick=async()=>{SFX.btn();let t='';
     try{if(navigator.clipboard&&navigator.clipboard.readText)t=await navigator.clipboard.readText();}catch(e){}
     if(t&&t.trim()){keyIn.type='text';keyIn.value=t.trim();setTimeout(()=>keyIn.type='password',1500);ov.querySelector('#sKeyHint').textContent='붙여넣었어. 저장 눌러줘.';}
     else{keyIn.type='text';keyIn.focus();keyIn.select();ov.querySelector('#sKeyHint').innerHTML='<span style="color:var(--yel)">입력칸을 길게 눌러서 "붙여넣기"를 골라줘.</span>';}};
-  const close=()=>{ov.remove();showDlg(true);
-    if(!DB.profile.done&&DB.settings.key.trim())startTutorial();else sayIdle();};
+  const close=()=>{ov.remove();showDlg(true);if(!DB.settings.key.trim()){sayIdle();return;}
+    if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());else if(!DB.profile.done)startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
     DB.settings.music=music;save();ambientSession();if(music)music_on();else BGM.stop();close();};
   ov.querySelector('#sClose').onclick=()=>{SFX.btn();close();};}
@@ -832,7 +831,7 @@ const SITU=[
 const ROUNDS=[['볼 거리',['미술관','건축','야경','공연','박물관','자연·공원']],['먹을 거리',['커피','디저트','로컬 식당','시장','술집','길거리 음식']],
   ['할 거리',['운동','산책','쇼핑','체험·클래스','서점·음반','사진 찍기']]];
 function startTutorial(){S.mode='tutorial';const P=DB.profile;P.situations=[];P.interests=[];showDlg(true);
-  say('안녕! 난 미연이야. 네 여행선배!<br>취향을 조금만 알려주면 선배가 딱딱 골라줄게.',{choices:[{label:'시작하기',fn:()=>situ(0)},{label:'건너뛰기',fn:finishTut}]});}
+  say((DB.user.name?esc(voc())+', 이제':'안녕! 난 미연이야. 이제')+' 취향을 조금만 알려줘.<br>선배가 딱 맞게 골라줄게.',{choices:[{label:'시작하기',fn:()=>situ(0)},{label:'건너뛰기',fn:finishTut}]});}
 function tutBox(html){const t=$('#tut');t.innerHTML=html;t.classList.remove('hidden');return t;}
 function situ(i){if(i>=SITU.length)return round(0);const [q,opts]=SITU[i];
   say(`이럴 땐 뭐가 끌려? <span style="color:var(--muted);font-weight:400">(${i+1}/5)</span>`,{cursor:false});
@@ -869,17 +868,19 @@ function demoCards(nT,nR){const out=[];let t=0,r=0;for(let k=0;k<DEMO.length*2&&
   if(!S.loc)S.loc={lat:35.6590,lng:139.7006,acc:20,at:Date.now()};return out;}
 
 /* ---------- chat with 미연 (AI picks her line + 3~4 answers for you) ---------- */
-const MIYEON=`너는 여행 추천 앱 "여행선배"의 캐릭터 '미연'이야. 사용자의 여행 선배.
-성격: 순수하고 남을 먼저 배려해. 선배인 척 아는 척을 하지만 알고 보면 허당이야(아는 척하다 틀리고, 길을 헷갈리고, 말이 꼬이고, 그래도 혼자 뿌듯해함). 귀여워.
+const MIYEON=`너는 여행 추천 앱 "여행선배"의 캐릭터 '미연'이야. 사용자(후배)의 여행 선배.
+배경: 명문대에 다니는 여대생. 똑똑하고 아는 게 많아. 역사·지리·문화·언어 상식을 대화에 자연스럽게 섞고, 말이 논리적이고 재치 있어. 절대 멍청하거나 유치하게 말하지 마.
+모에 포인트: 순수하고 남을 먼저 배려해. 선배답게 의젓한 척하지만 생활 속에선 살짝 허당이야(길치, 덤벙대다 뭘 떨어뜨림, 자신만만하게 말했다가 사소한 디테일을 헷갈림 정도). 지식 자체는 정확해.
 자기가 예쁘고 인기 많다는 걸 전혀 몰라. 그래서 칭찬이나 설레는 말을 들으면 진심으로 당황하거나 엉뚱하게 받아들여(예: 자기 얘기가 아니라고 생각함).
 순수하고 착하지만, 후배가 놀리면 발끈할 때도 있어(투덜대거나 삐친 척하다가 금방 풀림).
-말투: 항상 반말. 대사는 1~2문장, 70자 이내. 이모지·이모티콘 금지. "헤헤", "앗", "음…" 같은 말버릇은 가끔만.
-사용자 이름은 모르니까 이름으로 부르지 마. 부를 일이 있으면 "후배"라고만.
+말투: 항상 반말. 대사는 1~2문장, 80자 이내. 이모지·이모티콘 금지. "헤헤", "앗", "음…" 같은 말버릇은 가끔만.
+대화가 길어져도 같은 말·같은 화제를 되풀이하지 마. 화제는 자연스럽게 옮겨가도 되고, 질문만 하지 말고 미연 자신의 생각이나 이야기도 해.
 여기서는 가벼운 수다만 해. 실제 가게나 장소 이름을 지어내지 마.`;
+function nameRule(){const n=DB.user.name;return n?`후배 이름은 "${n}". 대화 중에 가끔(매번은 말고) 이름으로 불러. 부를 때는 "${voc()}"처럼.`:'후배 이름은 몰라. 부를 일이 있으면 "후배"라고만.';}
 const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','미연이 요즘 연습하는 것'];
-/* she can wrap up only after 3+ answers — then by chance, more likely the longer it goes (always by 8) */
-const CHAT_MIN=3,CHAT_END=[0,0,0,.35,.5,.65,.8,.9];
-const chatShouldEnd=n=>n>=8||(n>=CHAT_MIN&&Math.random()<CHAT_END[n]);
+/* she can wrap up only after 3+ answers, then 10% chance each turn (avg ~12 answers), always by 30 */
+const CHAT_MIN=3,CHAT_P=0.1,CHAT_CAP=30;
+const chatShouldEnd=n=>n>=CHAT_CAP||(n>=CHAT_MIN&&Math.random()<CHAT_P);
 const C={hist:[],picks:0,gen:0,typing:null,ended:false,busy:false};
 function chatCtx(){const now=new Date();const loc=(manualLoc()||DB.lastLoc||{}).label||'';
   const g=DB.groups[0],r=DB.routes[0];
@@ -890,18 +891,19 @@ function chatPrompt(final){const first=!C.hist.length;
   const log=C.hist.map(h=>(h.who==='m'?'미연: ':'후배: ')+h.text).join('\n');
   if(!DB.chat)DB.chat={recent:[]};
   return `${MIYEON}
+${nameRule()}
 [상황]
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?'미연이 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 미연이 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. 선택지는 후배가 미연에게 하는 반말 대사, 각 18자 이내. 서로 결이 다르게: 다정한 말, 미연을 놀리거나 장난치는 말, 미연을 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
+[할 일] ${first?'미연이 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 미연이 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 미연에게 하는 반말 대사, 각 18자 이내. 서로 결이 다르게: 다정한 말, 미연을 놀리거나 장난치는 말, 미연을 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
 JSON 하나만 출력: {"line":"미연 대사","mood":"normal","choices":["..."],"end":false}`;}
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];return v;}catch(e){return null;}}
 const DEMO_CHAT=[
-  {line:'후배, 오늘 많이 걸었지? 선배가 보기엔 한 3만 보는 걸은 것 같아.',mood:'smile',choices:['선배 덕분에 하나도 안 힘들어','3만 보는 좀 오버 아니야?','선배는 오늘도 예쁘다','다리 대신 바퀴 달고 싶어']},
+  {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배 덕분에 하나도 안 힘들어','암산 검산해 봐도 돼?','선배는 오늘도 예쁘다','다리 대신 바퀴 달고 싶어']},
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['선배 말한 거 맞아','뒤에 비둘기 있어','농담이야, 헤헤']},
   {line:'헤헤, 아무튼 선배는 길 찾기 천재니까… 어, 근데 여기 어디지?',mood:'fluster',choices:['지도 앱 켜줄까?','천재 맞아?','같이 헤매도 재밌어']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
@@ -922,7 +924,7 @@ async function chatStep(final){const gen=C.gen;C.busy=true;
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
   C.hist.push({who:'m',text:v.line});
-  v.end=final||(v.end===true&&C.picks>=CHAT_MIN)||v.choices.length<2;
+  v.end=final||v.choices.length<2;  // only we decide when it ends
   if(v.end)v.choices=[];chatShow(v);}
 function chatMood(m){const img=$('#charImg');img.src=m==='blush'?'miyeon_blush.png':'miyeon.png';
   if(m==='fluster'||m==='huff'){charEl.classList.remove('fluster','huff');void charEl.offsetWidth;charEl.classList.add(m);}}
@@ -951,6 +953,50 @@ birdLater(60000+Math.random()*60000);
 setInterval(()=>{if(window.BIRD&&BIRD.busy&&!birdOk())BIRD.scare();},250);
 document.addEventListener('pointerdown',()=>{if(window.BIRD&&BIRD.busy&&S.mode!=='chat')BIRD.scare();},{capture:true});  // tapping choices doesn't startle her
 
+/* ---------- your name (asked once; she calls you by it now and then) ---------- */
+const hasBatchim=s=>{const c=String(s).charCodeAt(String(s).length-1);return c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28!==0;};
+const isHangul=s=>{const c=String(s).charCodeAt(String(s).length-1);return c>=0xAC00&&c<=0xD7A3;};
+function voc(){const n=DB.user.name;if(!n)return '후배';return isHangul(n)?n+(hasBatchim(n)?'아':'야'):n;}
+function askName(next,msg){S.mode='naming';showDlg(true);
+  msg=msg||(DB.profile.done?'아 맞다, 우리 꽤 같이 다녔는데 나 아직 네 이름도 모르잖아.<br>이름이 뭐야?':'안녕! 난 미연이야. 여행은 선배한테 맡겨.<br>근데 너, 이름이 뭐야?');
+  say(msg+'<input id="nin" maxlength="10" enterkeyhint="done" autocomplete="off" placeholder="이름"><div class="choices"><button class="choice sel" id="nok">확인</button></div>',{cursor:false,active:true});
+  const i=$('#nin');setTimeout(()=>i.focus(),50);
+  const ok=()=>{const v=i.value.trim().slice(0,10);if(!v){i.focus();return;}SFX.btn();i.blur();
+    say(`<span class="q">“${esc(v)}”</span><br>${esc(v)}… 맞지?`,{choices:[
+      {label:'응',fn:()=>{DB.user.name=v;save();const n=esc(voc());
+        const lines=[`${n}! 좋은 이름이다. 선배가 잘 챙겨줄게.`,`${esc(v)}, 기억했어. 선배는 이름 같은 건 절대 안 까먹어… 아마도.`,`${n}, 반가워. 이름이랑 얼굴이랑 잘 어울린다.`];
+        say(lines[Math.floor(Math.random()*lines.length)],{choices:[{label:'잘 부탁해',fn:next}]});}},
+      {label:'아니',fn:()=>askName(next,'앗, 다시. 이름이 뭐라고?')}]});};
+  $('#nok').onclick=ok;i.onkeydown=e=>{if(e.key==='Enter')ok();};}
+
+/* ---------- reset (from settings) ---------- */
+function openReset(){const ov=document.createElement('div');ov.className='overlay';
+  const opt={me:true,box:false,key:false};
+  ov.innerHTML=`<div style="position:relative;width:100%;max-width:380px"><div class="tagname">초기화</div><div class="win px solid">
+    <div class="small" style="margin-top:0">무엇을 지울지 골라줘. 지운 건 되돌릴 수 없어.</div>
+    <button class="chk on" data-o="me"><i></i>이름·취향 (처음 만난 것처럼 다시)</button>
+    <button class="chk off" data-o="box"><i></i>보관함·지나친 카드·지난 동선</button>
+    <button class="chk off" data-o="key"><i></i>API 키·모델</button>
+    <div class="btnrow"><button class="px gold" id="rOk">초기화</button><button class="px" id="rNo" style="color:var(--muted)">취소</button></div></div></div>`;
+  $('#overlayHost').appendChild(ov);
+  ov.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{SFX.touch();const k=b.dataset.o;opt[k]=!opt[k];b.classList.toggle('on',opt[k]);b.classList.toggle('off',!opt[k]);});
+  ov.querySelector('#rNo').onclick=()=>{SFX.btn();ov.remove();};
+  ov.querySelector('#rOk').onclick=()=>{if(!opt.me&&!opt.box&&!opt.key){toast('지울 걸 하나 이상 골라줘');return;}SFX.btn();
+    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};}
+    if(opt.box){DB.groups=[];DB.passed=[];DB.routes=[];}
+    if(opt.key){DB.settings.key='';DB.settings.model=DEFAULT_MODEL;}
+    save();location.reload();};}
+
+/* ---------- sound experiment buttons (bottom of the room) ---------- */
+function soundTestHTML(){return `<div class="stest"><div class="note">소리 실험 · 소리가 작아졌을 때 하나씩 눌러보고, 돌아오는 버튼을 알려줘.</div>
+  <div class="minibtns"><button class="px" data-st="A">A 재생 모드</button><button class="px" data-st="B">B 오디오 요소</button><button class="px" data-st="C">C 무음 재생</button></div></div>`;}
+
+/* ---------- 미연's waist: fade it out from the top edge of the small dialog box down (any screen height) ---------- */
+function fitChar(){const H=mainEl.clientHeight,c=charEl.getBoundingClientRect(),m=mainEl.getBoundingClientRect();if(!H||!c.height)return;
+  const boxTop=H*(1-0.104)-102,top=c.top-m.top;
+  charEl.style.setProperty('--fade',Math.max(40,Math.min(96,(boxTop+6-top)/c.height*100)).toFixed(1)+'%');}
+window.addEventListener('resize',fitChar);$('#charImg').addEventListener('load',fitChar);setTimeout(fitChar,0);
+
 /* ---------- boot ---------- */
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
@@ -958,6 +1004,7 @@ let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('input'))e.preventDefault();});
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 미연이야.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
+else if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());
 else if(!DB.profile.done)startTutorial();
 else sayIdle();
 window.__S=S;window.__DB=DB;window.__R=R;
