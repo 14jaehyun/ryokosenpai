@@ -235,3 +235,8 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .gbtns.three{left:16px;right:16px;gap:8px}
 .gbtns.three .gbtn{font-size:12px}
 .gbtns.three .gbtn small{margin-left:4px}
+
+/* four link buttons in the detail window */
+.btnrow.four{gap:6px}
+.btnrow.four>*{min-width:0}
+.minibtns [data-st]{font-size:12px}

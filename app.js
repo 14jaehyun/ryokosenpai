@@ -1,16 +1,16 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.12';
+const VERSION='2.0.13';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
 const DEFAULT_MODEL='gemini-3.5-flash-lite';
-const DEF={settings:{key:'',model:DEFAULT_MODEL,music:true,links:{google:true,youtube:true,kakao:false}},
+const DEF={settings:{key:'',model:DEFAULT_MODEL,music:true},
   profile:{done:false,situations:[],interests:[],free:'',stats:{}},groups:[],passed:[],routes:[],lastLoc:null};
 let DB;
 function load(){try{DB=JSON.parse(localStorage.getItem(LS))||{}}catch(e){DB={}}
   DB=Object.assign(JSON.parse(JSON.stringify(DEF)),DB);
-  DB.settings=Object.assign({},DEF.settings,DB.settings);DB.settings.links=Object.assign({},DEF.settings.links,DB.settings.links);
+  DB.settings=Object.assign({},DEF.settings,DB.settings);delete DB.settings.links;
   if(!DB.settings.model)DB.settings.model=DEFAULT_MODEL;
   DB.profile=Object.assign({},DEF.profile,DB.profile);
   if(!Array.isArray(DB.routes))DB.routes=[];
@@ -63,10 +63,17 @@ let AC=null,SFXOUT=null;
    background, so after a Maps trip everything here played at a whisper. With music on we use 'transient-solo'
    (still follows the silent switch, but takes the audio over instead of being ducked). Music off → 'ambient'.
    Re-applied after the mic (which leaves a quiet earpiece/record route) and on every return to the app. */
-function ambientSession(){const s=navigator.audioSession;if(!s)return;const want=DB.settings.music?'transient-solo':'ambient';
+function ambientSession(){const s=navigator.audioSession;if(!s)return;const want=SOUNDTEST==='A'?'playback':DB.settings.music?'transient-solo':'ambient';
   try{if(s.type===want)s.type='auto';s.type=want;}catch(e){}}
+/* where all sound goes: the speaker directly, or (experiment B) through an <audio> element */
+let SOUNDTEST='',ROUTE_DEST=null,ROUTE_EL=null;
+function acOut(){return ROUTE_DEST||AC.destination;}
 function audio(){try{if(!AC){ambientSession();AC=new(window.AudioContext||window.webkitAudioContext)();
-    SFXOUT=AC.createGain();SFXOUT.gain.value=1;SFXOUT.connect(AC.destination);}
+    ROUTE_DEST=null;
+    if(SOUNDTEST==='B'&&AC.createMediaStreamDestination){ROUTE_DEST=AC.createMediaStreamDestination();
+      if(!ROUTE_EL){ROUTE_EL=document.createElement('audio');ROUTE_EL.setAttribute('playsinline','');ROUTE_EL.autoplay=true;}
+      ROUTE_EL.srcObject=ROUTE_DEST.stream;const p=ROUTE_EL.play();if(p&&p.catch)p.catch(()=>{});}
+    SFXOUT=AC.createGain();SFXOUT.gain.value=1;SFXOUT.connect(acOut());}
   if(AC.state!=='running'&&AC.state!=='closed'&&!document.hidden){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}}catch(e){}return AC;}
 /* iOS leaves the context 'interrupted' (not 'suspended') after leaving the app.
    On any touch: if it isn't running, resume; if that doesn't take within 350ms, throw it away and build a new one. */
@@ -130,7 +137,7 @@ const BGM=(()=>{
   function graph(){const a=audio();if(!a||out)return a;
     out=a.createGain();out.gain.value=0;filt=a.createBiquadFilter();filt.type='lowpass';filt.frequency.value=2600;filt.Q.value=0.5;
     const dry=a.createGain();dry.gain.value=1;const dl=a.createDelay(1);dl.delayTime.value=0.23;const fb=a.createGain();fb.gain.value=0.3;const wet=a.createGain();wet.gain.value=0.22;
-    filt.connect(dry).connect(out);filt.connect(dl);dl.connect(fb).connect(dl);dl.connect(wet).connect(out);out.connect(a.destination);
+    filt.connect(dry).connect(out);filt.connect(dl);dl.connect(fb).connect(dl);dl.connect(wet).connect(out);out.connect(acOut());
     const pw=(h)=>{const re=new Float32Array(h.length+1),im=new Float32Array(h.length+1);h.forEach((v,i)=>im[i+1]=v);return a.createPeriodicWave(re,im);};
     waves.lead=pw([1,.18,.28,.06,.12,0,.05]);waves.bass=pw([1,0,.11]);return a;}
   function events(t){const e8=60/t.tempo/2,list=[];
@@ -525,25 +532,28 @@ $('#routeBtn').onclick=()=>{if(!S.pins.length)return;SFX.btn();const pc=pinnedCa
 function gSearch(c){const q=encodeURIComponent(searchText(c));return `https://www.google.com/maps/search/?api=1&query=${q}${c.placeId?`&query_place_id=${encodeURIComponent(c.placeId)}`:''}`;}
 function kSearch(c){const q=encodeURIComponent([regionKR(c.address),placeTitle(c)].filter(Boolean).join(' ')||c.name);return {app:`kakaomap://search?q=${q}`,web:`https://map.kakao.com/link/search/${q}`};}
 function ySearch(c){const q=encodeURIComponent(placeTitle(c)+' '+(c.area||''));return {app:`youtube://www.youtube.com/results?search_query=${q}`,web:`https://www.youtube.com/results?search_query=${q}`};}
-function kakaoOK(items){const p=S.loc||items.find(c=>c.lat!=null);return DB.settings.links.kakao&&(p?inKorea(p):true);}
+/* Korean map apps are offered when the place itself is in Korea (not where you are standing) */
+const allKR=items=>items.length>0&&items.every(isKR);
+function nSearch(c){const q=encodeURIComponent([regionKR(c.address),placeTitle(c)].filter(Boolean).join(' ')||c.name);
+  return {app:`nmap://search?query=${q}&appname=${encodeURIComponent(location.origin+location.pathname)}`,web:`https://map.naver.com/p/search/${q}`};}
 
 /* ---------- detail window ---------- */
-function openDetail(c){SFX.btn();const st=DB.settings.links;const d=distM(S.loc,c);
-  const ov=document.createElement('div');ov.className='overlay';
-  const btns=[];if(st.google)btns.push('<button class="px" data-l="g">구글맵<small>지도 · 후기</small></button>');
-  if(kakaoOK([c]))btns.push('<button class="px" data-l="k">카카오맵<small>지도</small></button>');
-  if(st.youtube)btns.push('<button class="px" data-l="y">유튜브<small>관련 영상</small></button>');
+function openDetail(c){SFX.btn();const d=distM(S.loc,c);
+  const ov=document.createElement('div');ov.className='overlay';const kr=isKR(c);
+  const btns=['<button class="px" data-l="g">구글맵<small>후기</small></button>','<button class="px" data-l="y">유튜브<small>영상</small></button>'];
+  if(kr)btns.push('<button class="px" data-l="n">네이버<small>지도</small></button>','<button class="px" data-l="k">카카오<small>지도</small></button>');
   ov.innerHTML=`<div class="win px solid"><h3>${esc(c.name)}</h3>${placeTitle(c)&&placeTitle(c)!==c.name?`<div class="sub" style="margin-bottom:4px">${esc(placeTitle(c))}</div>`:''}
     <div class="sub">${esc(c.line1)}<br>${esc(c.line2)}</div><div class="sep"></div>
     <div class="row" style="color:${c.open?'#6ee696':'#a0aacc'}">■ ${c.open?'영업 중':'영업 시간 확인'}${c.hours?' · '+esc(c.hours):''}</div>
     ${d!=null?`<div class="row">현재 위치에서 도보 ${walkMin(d)}분 · ${fmtKm(d)}</div>`:''}
     ${c.address?`<div class="sub" style="margin-top:6px">${esc(c.address)}</div>`:''}
     ${c.tags.length?`<div class="tags">${c.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:''}
-    ${btns.length?`<div class="btnrow">${btns.join('')}</div>`:''}</div><div class="closehint">바깥을 누르면 닫혀요</div>`;
+    <div class="btnrow${btns.length>3?' four':''}">${btns.join('')}</div></div><div class="closehint">바깥을 누르면 닫혀요</div>`;
   ov.addEventListener('click',e=>{if(e.target===ov||e.target.classList.contains('closehint'))ov.remove();});
   ov.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{SFX.btn();const l=b.dataset.l;
     if(l==='g')openGoogle(gSearch(c));
     if(l==='k'){const k=kSearch(c);openExternal(k.app,k.web);}
+    if(l==='n'){const n=nSearch(c);openExternal(n.app,n.web);}
     if(l==='y'){const y=ySearch(c);openExternal(y.app,y.web);}});
   $('#overlayHost').appendChild(ov);}
 
@@ -572,15 +582,13 @@ function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);l
   if(!S.loc)html+=`<div class="total">현재 위치를 못 받았어요. 설정에서 위치를 확인해 주세요.</div>`;
   box.innerHTML=html;
   box.querySelectorAll('.rcard').forEach(el=>el.querySelector('.h').addEventListener('pointerdown',e=>startDrag(e,el)));
-  const st=DB.settings.links;const btns=[];const useK=kakaoOK(R.items);const useG=st.google||!useK;
-  const kr=R.items.length&&R.items.every(c=>c.lat!=null)?R.items.every(inKorea):(S.loc?inKorea(S.loc):false);
-  const useN=kr;                                   // 네이버지도: route screen only, Korea only (test)
-  const allXY=R.items.every(c=>c.lat!=null&&c.lng!=null);
-  const many=[useG,useK,useN].filter(Boolean).length>=3;
-  if(useG)btns.push(`<button class="gbtn" id="goG">${many?'구글 ▶':'Google Map으로 ▶'}</button>`);
+  /* places in Korea → 네이버 · 카카오 · 구글 (네이버 first: best walking routes); abroad → Google only */
+  const btns=[];const kr=allKR(R.items);const allXY=R.items.every(c=>c.lat!=null&&c.lng!=null);
+  const useN=kr&&allXY,useK=kr,useG=true,many=[useG,useK,useN].filter(Boolean).length>=3;
+  if(useN)btns.push(`<button class="gbtn" id="goN">네이버 ▶</button>`);
   if(useK){if(allXY)btns.push(`<button class="gbtn" id="goK">${many?'카카오 ▶':'카카오맵 동선 ▶'}</button>`);
     else{const n=R.items.length,k=Math.min(R.kIdx,n-1);btns.push(`<button class="gbtn" id="goK">카카오 ${n>1?(k+1)+'번':''} 찾기 ▶</button>`);}}
-  if(useN)btns.push(`<button class="gbtn" id="goN">네이버<small>테스트</small></button>`);
+  btns.push(`<button class="gbtn" id="goG">${kr?'구글 ▶':'Google Map으로 ▶'}</button>`);
   const g=$('#gbtns');g.innerHTML=btns.join('');g.classList.toggle('three',many);
   if($('#goG'))$('#goG').onclick=()=>{SFX.btn();openGoogle(gmapsUrl());if(R.mode==='new')setTimeout(finishRoute,600);};
   if($('#goK'))$('#goK').onclick=()=>{SFX.btn();
@@ -588,13 +596,13 @@ function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);l
     /* some place has no coordinates yet → old behaviour: open the places one by one */
     const k=Math.min(R.kIdx,R.items.length-1);const u=kSearch(R.items[k]);openExternal(u.app,u.web);
     R.kIdx=(k+1)%R.items.length;setTimeout(()=>renderRoute(new Set()),800);};
-  if($('#goN'))$('#goN').onclick=()=>{SFX.btn();const u=naverRouteUrl();openExternal(u.app,u.web);};}
+  if($('#goN'))$('#goN').onclick=()=>{SFX.btn();const u=naverRouteUrl();openExternal(u.app,u.web);if(R.mode==='new')setTimeout(finishRoute,600);};}
 /* 카카오맵 도보 길찾기: 현재 위치 → 경유지(vp, vp2…vp5) → 마지막 핀. 좌표만 받음 */
 function kakaoRouteUrl(){const it=R.items,xy=c=>`${(+c.lat).toFixed(6)},${(+c.lng).toFixed(6)}`;
   const pts=S.loc?[S.loc,...it]:[...it];const sp=pts.length>1?pts[0]:null,ep=pts[pts.length-1],vias=pts.slice(sp?1:0,-1).slice(0,5);
   const q=[sp?`sp=${xy(sp)}`:'',...vias.map((c,i)=>`${i?'vp'+(i+1):'vp'}=${xy(c)}`),`ep=${xy(ep)}`,'by=foot'].filter(Boolean).join('&');
   return {app:`kakaomap://route?${q}`,web:`https://m.map.kakao.com/scheme/route?${q}`};}
-/* 네이버지도 도보 길찾기 (테스트): 이름까지 넘김. 경유지는 v1~v5 */
+/* 네이버지도 도보 길찾기: 이름까지 넘김. 경유지는 v1~v5 */
 function naverRouteUrl(){const it=R.items,e=encodeURIComponent,nm=c=>e(placeTitle(c)||c.name||'');
   const P=[];if(S.loc){P.push(`slat=${S.loc.lat}`,`slng=${S.loc.lng}`,`sname=${e('현재 위치')}`);}
   const dest=it[it.length-1],vias=(S.loc?it.slice(0,-1):it.slice(1,-1)).slice(0,5);
@@ -709,7 +717,7 @@ async function placeLabel(l){if(!l)return '';
     const out=[];parts.forEach(x=>{if(x&&!out.includes(x))out.push(x);});
     return out.join(' ')||(j.display_name||'').split(',').slice(0,3).reverse().join(' ').trim();}catch(e){return '';}}
 function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=document.createElement('div');ov.className='overlay';ov.style.alignItems='flex-start';ov.style.overflowY='auto';
-  const L={...st.links};let music=st.music!==false;
+  let music=st.music!==false;
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px;margin:calc(var(--sat) + 30px) 0 30px"><div class="tagname">설정</div><div class="win px solid">
     ${msg?`<div class="sub" style="color:var(--yel);margin-bottom:10px">${esc(msg)}</div>`:''}
     <div class="row" style="margin-top:4px">제미나이 API 키</div>
@@ -722,10 +730,11 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     <div class="locbox" id="sLoc">확인 중…</div>
     <div class="minibtns"><button class="px" id="sLocRe">GPS로 다시 받기</button><button class="px" id="sLocFix">지도에서 고치기</button></div>
     <div class="minibtns"><button class="px" id="sLocMap">구글맵에서 보기</button><button class="px" id="sLocPaste">구글맵 좌표 붙여넣기</button></div>
-    <div class="sep"></div><div class="row" style="margin-top:0">상세 창 링크 버튼</div>
-    ${[['google','구글맵'],['youtube','유튜브'],['kakao','카카오맵 (한국에서만)']].map(([k,n])=>`<button class="chk ${L[k]?'on':'off'}" data-k="${k}"><i></i>${n}</button>`).join('')}
     <div class="sep"></div>
     <button class="chk ${music?'on':'off'}" id="sMusic" style="margin-top:0"><i></i>배경음악</button>
+    <div class="sep"></div><div class="row" style="margin-top:0">소리 실험</div>
+    <div class="small">다른 앱에 다녀와서 소리가 작아졌을 때 하나씩 눌러보고, 소리가 돌아오는 버튼을 알려주세요.</div>
+    <div class="minibtns"><button class="px" data-st="A">A 재생 모드</button><button class="px" data-st="B">B 오디오 요소</button><button class="px" data-st="C">C 무음 재생</button></div>
     <div class="btnrow"><button class="px gold" id="sSave">저장</button><button class="px" id="sClose" style="color:var(--muted)">닫기</button></div>
     <div class="small" style="text-align:center;margin-top:12px">여행선배 v${VERSION}</div></div></div>`;
   $('#overlayHost').appendChild(ov);showDlg(false);
@@ -749,7 +758,7 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
       box.querySelector('#cpNo').onclick=()=>{SFX.btn();box.remove();};
       box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어요. 37.5, 127.0 같은 숫자를 넣어주세요');return;}box.remove();setManual(p.lat,p.lng);};};
     const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
-  ov.querySelectorAll('.chk[data-k]').forEach(b=>b.onclick=()=>{SFX.touch();L[b.dataset.k]=!L[b.dataset.k];b.classList.toggle('on',L[b.dataset.k]);b.classList.toggle('off',!L[b.dataset.k]);});
+  ov.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>soundTest(b.dataset.st));
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
   const keyIn=ov.querySelector('#sKey');
   ov.querySelector('#sPaste').onclick=async()=>{SFX.btn();let t='';
@@ -759,9 +768,21 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
   const close=()=>{ov.remove();showDlg(true);
     if(!DB.profile.done&&DB.settings.key.trim())startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
-    DB.settings.links=L;DB.settings.music=music;save();ambientSession();if(music)music_on();else BGM.stop();close();};
+    DB.settings.music=music;save();ambientSession();if(music)music_on();else BGM.stop();close();};
   ov.querySelector('#sClose').onclick=()=>{SFX.btn();close();};}
 function music_on(){music();}
+/* ---- sound experiments (temporary): press one after the sound has gone quiet, see which brings it back ---- */
+let silentUrl=null;
+function silentWav(){if(silentUrl)return silentUrl;const sr=22050,n=sr/4,b=new ArrayBuffer(44+n*2),v=new DataView(b);const w=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i));};
+  w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+  return silentUrl=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));}
+function soundTest(k){
+  if(k==='C'){const el=new Audio(silentUrl||silentWav());el.setAttribute('playsinline','');const p=el.play();
+    const after=()=>{rebuildAudio();setTimeout(()=>SFX.pin(),150);};if(p&&p.then)p.then(after,after);else after();
+    toast('C 적용 · 무음 재생');return;}
+  SOUNDTEST=k;if(k!=='B'&&ROUTE_EL){try{ROUTE_EL.pause();ROUTE_EL.srcObject=null;}catch(e){}}
+  rebuildAudio();setTimeout(()=>SFX.pin(),150);
+  toast(k==='A'?'A 적용 · 재생 모드':'B 적용 · 오디오 요소',2400);}
 
 function parseLatLng(t){const m=String(t||'').match(/(-?\d{1,2}\.\d{3,})\s*[,\s]\s*(-?\d{1,3}\.\d{3,})/);if(!m)return null;const lat=+m[1],lng=+m[2];
   if(Math.abs(lat)>90||Math.abs(lng)>180)return null;return {lat,lng};}
