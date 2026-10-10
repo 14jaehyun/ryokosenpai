@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.13';
+const VERSION='2.0.14';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -28,7 +28,7 @@ function distM(a,b){if(!a||!b||a.lat==null||b.lat==null)return null;const R=6371
   const dLa=(b.lat-a.lat)*t,dLo=(b.lng-a.lng)*t;const x=Math.sin(dLa/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
 const fmtKm=m=>m<1000?(Math.round(m/10)*10)+'m':(m<100000?(m/1000).toFixed(1):Math.round(m/1000).toLocaleString())+'km';
 const walkMin=m=>Math.max(1,Math.round(m*1.3/75));
-const transitTxt=m=>m<1200?'걸어가는 게 빨라요':'약 '+Math.round(8+m/1000*2.6)+'분';
+const transitTxt=m=>m<1200?'걸어가는 게 빨라':'약 '+Math.round(8+m/1000*2.6)+'분';
 const inKorea=p=>!!p&&p.lat>33&&p.lat<38.9&&p.lng>124.5&&p.lng<131.9;
 const PIN_SVG='<svg class="pin" viewBox="0 0 6 8" shape-rendering="crispEdges"><rect x="1" y="0" width="4" height="3" fill="#ffd66e"/><rect x="0" y="3" width="6" height="1" fill="#ffd66e"/><rect x="2" y="4" width="2" height="4" fill="#ffd66e"/></svg>';
 function toast(msg,ms=2200){const t=document.createElement('div');t.className='toast px solid';t.textContent=msg;$('#app').appendChild(t);setTimeout(()=>t.remove(),ms);}
@@ -100,7 +100,7 @@ function noise(t0,dur,vol,type,f0,f1,q,atk){const a=audio();if(!a)return;const n
   s.connect(flt).connect(g).connect(SFXOUT);s.start(st);s.stop(st+dur+0.02);}
 const SFX={
   touch(){noise(0,0.02,0.35,'highpass',3000);osc('square',220,110,0.006,0.05,0.07,0.06);},
-  trans(){osc('triangle',330,165,0,0.28,0.16,0.3);osc('triangle',165,262,0.40,0.32,0.14,0.34);},
+  trans(){osc('triangle',330,165,0,0.28,0.192,0.3);osc('triangle',165,262,0.40,0.32,0.168,0.34);},  // 120%
   swipe(){noise(0,0.18,0.364,'bandpass',1100,600,0.9,0.35);noise(0.05,0.12,0.156,'lowpass',700,300,0.5,0.3);},
   pin(){noise(0,0.012,0.3,'highpass',4000);osc('square',988,988,0.012,0.06,0.06,0.08);osc('square',1319,1319,0.072,0.2,0.06,0.22);},
   btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);}
@@ -193,7 +193,7 @@ function say(html,{choices=null,cursor=true,active=false}={}){
   dlgWrap.classList.toggle('active',!!choices||active);
   if(choices)dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();choices[+b.dataset.i].fn();});
 }
-function sayIdle(){S.mode='idle';say('어디로 놀러 가볼까요?<br>화면을 꾹 누른 채로 말해주세요.<div class="hint">예) 저녁 먹고 시부야에서 놀 거리</div>');}
+function sayIdle(){S.mode='idle';say('어디로 놀러 가볼까?<br>화면을 꾹 누른 채로 말해줘.<div class="hint">예) 저녁 먹고 시부야에서 놀 거리</div>');}
 function showDlg(v){dlgWrap.classList.toggle('hidden',!v);}
 
 /* ---------- blush gimmick ---------- */
@@ -211,46 +211,50 @@ let rec=null,heard='',recDone=null,recHold=false,recTries=0;
    (mic still held by the old audio session) — while the finger is down, quietly start a fresh one */
 function startRec(){
   const r=new SRec();rec=r;r.lang='ko-KR';r.interimResults=true;r.continuous=true;
-  r.onresult=e=>{if(rec!==r)return;let t='';for(const x of e.results)t+=x[0].transcript;heard=t.trim();say('듣고 있어요…<div class="hint" style="color:var(--yel)">'+esc(heard)+'</div>',{cursor:false});};
-  r.onerror=e=>{if(rec!==r)return;if(e.error==='not-allowed'||e.error==='service-not-allowed'){recHold=false;rec=null;BGM.duck(false);typeInput('마이크를 쓸 수 없어서 글로 받을게요.');}};
+  r.onresult=e=>{if(rec!==r)return;let t='';for(const x of e.results)t+=x[0].transcript;heard=t.trim();say('듣고 있어…<div class="hint" style="color:var(--yel)">'+esc(heard)+'</div>',{cursor:false});};
+  r.onerror=e=>{if(rec!==r)return;if(e.error==='not-allowed'||e.error==='service-not-allowed'){recHold=false;rec=null;BGM.duck(false);typeInput('마이크를 못 써서 글로 받을게.');}};
   r.onend=()=>{r._ended=true;if(rec!==r)return;
     if(recDone){const f=recDone;recDone=null;f();return;}
     if(recHold&&!heard&&recTries<4){recTries++;setTimeout(()=>{if(recHold&&rec===r){try{startRec();}catch(e){}}},150);}};
   r.start();}
 function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKick();
   if(rec){try{rec.abort();}catch(e){}rec=null;}
-  try{BGM.duck(true);startRec();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}
-  catch(e){try{startRec();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;BGM.duck(false);return false;}}}
+  try{BGM.duck(true);startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}
+  catch(e){try{startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;BGM.duck(false);return false;}}}
 function abortListen(){recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();}
 function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);ambientSession();res(heard);}};
   if(rec._ended)return fin();recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
 function typeInput(msg){S.mode='typing';
-  say(esc(msg||'하고 싶은 걸 적어주세요.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
+  say(esc(msg||'하고 싶은 걸 적어줘.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
   const i=$('#tin');setTimeout(()=>i.focus(),50);
   const ok=()=>{SFX.btn();const v=i.value.trim();i.blur();if(v)gotText(v);else sayIdle();};
   $('#tok').onclick=ok;$('#tcancel').onclick=()=>{SFX.btn();i.blur();sayIdle();};i.onkeydown=e=>{if(e.key==='Enter')ok();};}
 
-/* ---------- main touch: hold to talk / swipe up to room / tap Miyeon ---------- */
-(function(){const t=$('#touch');let st=null,holdT=null,listening=false;
-  t.addEventListener('pointerdown',e=>{if(S.mode!=='idle')return;audio();st={x:e.clientX,y:e.clientY};listening=false;
+/* ---------- main touch: hold to talk / swipe up to room / tap Miyeon / tap the dialog box = chat ---------- */
+(function(){let st=null,holdT=null,listening=false;
+  const down=e=>{
+    if(e.currentTarget===dlgWrap&&S.mode==='chat'){if(!e.target.closest('.choice'))chatTap();return;}
+    if(S.mode!=='idle')return;audio();st={x:e.clientX,y:e.clientY,dlg:e.currentTarget===dlgWrap};listening=false;
     charEl.classList.add('pressed');SFX.touch();
-    holdT=setTimeout(()=>{holdT=null;if(!st)return;listening=listen();if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},220);});
-  t.addEventListener('pointermove',e=>{if(!st||listening)return;const dy=e.clientY-st.y;
-    if(dy<-36){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}});
+    holdT=setTimeout(()=>{holdT=null;if(!st)return;listening=listen();if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},220);};
+  const move=e=>{if(!st||listening)return;const dy=e.clientY-st.y;
+    if(dy<-36){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
   const up=async e=>{if(!st)return;const p=st;clearTimeout(holdT);st=null;charEl.classList.remove('pressed');
-    if(holdT===null&&listening){listening=false;S.mode='busy';const txt=await stopListen();if(txt)gotText(txt);else{S.mode='idle';say('잘 못 들었어요.<br>꾹 누른 채로 다시 말해주세요.');}}
-    else if(S.mode==='idle'){if(!charTapped(p.x,p.y))say('화면을 <span class="q">꾹 누른 채로</span> 말해주세요.<div class="hint">위로 밀면 보관함으로 가요.</div>');}
+    if(holdT===null&&listening){listening=false;S.mode='busy';const txt=await stopListen();if(txt)gotText(txt);else{S.mode='idle';say('어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?');}}
+    else if(S.mode==='idle'&&e.type==='pointerup'){if(p.dlg)startChat();
+      else if(!charTapped(p.x,p.y))say('화면을 <span class="q">꾹 누른 채로</span> 말해줘.<div class="hint">위로 밀면 보관함으로 가. 대사창을 누르면 나랑 수다 떨 수 있어.</div>');}
     holdT=null;};
-  t.addEventListener('pointerup',up);t.addEventListener('pointercancel',up);
+  [$('#touch'),dlgWrap].forEach(el=>{el.addEventListener('pointerdown',down);el.addEventListener('pointermove',move);
+    el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);});
 })();
 
 function gotText(txt){
   if(/설정/.test(txt)){openSettings();return;}
-  if(/(음악|배경음|bgm)/i.test(txt)&&/(꺼|끄|멈|그만|조용)/.test(txt)){DB.settings.music=false;save();BGM.stop();ambientSession();say('음악을 껐어요.<div class="hint">"음악 켜줘"라고 하면 다시 틀어요.</div>');S.mode='idle';return;}
-  if(/(음악|배경음|bgm)/i.test(txt)&&/(켜|틀|다시)/.test(txt)){DB.settings.music=true;save();ambientSession();music();say('음악을 다시 틀었어요.');S.mode='idle';return;}
+  if(/(음악|배경음|bgm)/i.test(txt)&&/(꺼|끄|멈|그만|조용)/.test(txt)){DB.settings.music=false;save();BGM.stop();ambientSession();say('음악 껐어.<div class="hint">"음악 켜줘"라고 하면 다시 틀게.</div>');S.mode='idle';return;}
+  if(/(음악|배경음|bgm)/i.test(txt)&&/(켜|틀|다시)/.test(txt)){DB.settings.music=true;save();ambientSession();music();say('음악 다시 틀었어.');S.mode='idle';return;}
   if(/취향/.test(txt)&&/(다시|새로|바꿀|정할)/.test(txt)){startTutorial();return;}
   S.mode='confirm';
-  say(`<span class="q">“${esc(txt)}”</span><br>이게 맞나요?`,{choices:[{label:'네',fn:()=>startSearch(txt)},{label:'아니요',fn:()=>{S.mode='idle';say('다시 말해주세요.<br>화면을 꾹 누른 채로요.');}}]});
+  say(`<span class="q">“${esc(txt)}”</span><br>이거 맞지?`,{choices:[{label:'응',fn:()=>startSearch(txt)},{label:'아니',fn:()=>{S.mode='idle';say('앗, 다시 말해줘.<br>화면을 꾹 누른 채로.');}}]});
 }
 
 /* ---------- location ---------- */
@@ -260,10 +264,10 @@ function manualLoc(){const m=DB.manualLoc;return m&&Date.now()-m.at<MANUAL_MS?m:
 function getLoc(force){if(!force&&manualLoc())return Promise.resolve(manualLoc());return gpsLoc(force);}
 function gpsLoc(force){return new Promise(res=>{LOCERR='';
   const cached=DB.lastLoc&&Date.now()-DB.lastLoc.at<(force?0:10*60e3)?DB.lastLoc:null;
-  if(!navigator.geolocation){LOCERR='이 기기에서 위치를 쓸 수 없어요.';return res(cached);}
+  if(!navigator.geolocation){LOCERR='이 기기에선 위치를 쓸 수 없어.';return res(cached);}
   navigator.geolocation.getCurrentPosition(p=>{const l={lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy||0),at:Date.now(),label:DB.lastLoc&&distM(DB.lastLoc,{lat:p.coords.latitude,lng:p.coords.longitude})<300?DB.lastLoc.label:''};
       DB.lastLoc=l;save();res(l);},
-    err=>{LOCERR=err.code===1?'위치 권한이 꺼져 있어요. 아이폰 설정 › 개인정보 보호 및 보안 › 위치 서비스 › Safari 웹사이트를 "앱을 사용하는 동안"으로 바꿔주세요.':err.code===3?'위치를 받는 데 시간이 너무 걸렸어요. 다시 시도해 주세요.':'지금 위치를 확인할 수 없어요.';
+    err=>{LOCERR=err.code===1?'위치 권한이 꺼져 있어. 아이폰 설정 › 개인정보 보호 및 보안 › 위치 서비스 › Safari 웹사이트를 "앱을 사용하는 동안"으로 바꿔줘.':err.code===3?'위치 받는 데 너무 오래 걸렸어. 다시 해볼래?':'지금 위치를 확인할 수가 없어.';
       res(DB.lastLoc&&Date.now()-DB.lastLoc.at<30*60e3?DB.lastLoc:null);},
     {enableHighAccuracy:true,timeout:12000,maximumAge:force?0:60000});});}
 
@@ -287,6 +291,7 @@ ${profileText()}
 - 해외라면 현지인이 실제로 가는 곳을 우선.
 - 코스나 일정이 아니라 서로 독립적인 '할 거리'.
 - kind "taste" ${nT}개: 취향에 잘 맞는 곳. kind "random" ${nR}개: 평소 취향과 반대 결의 의외인 곳(그래도 근처에서 지금 가능).
+- line1·line2는 존댓말 말고 짧은 반말이나 명사형으로.
 - mapsTitle은 Google 지도에 등록된 이름을 글자 그대로(현지어 그대로) 적어라. address는 Google 지도의 주소 그대로.
 출력은 설명 없이 JSON 배열만:
 [{"name":"한국어 표시 이름","mapsTitle":"Google 지도 등록 이름 그대로","address":"Google 지도 주소 그대로","line1":"한 줄 설명 18자 안팎","line2":"한 줄 설명 20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":["현금만","흡연 가능","예약 필요" 같은 주의사항, 최대 3개, 없으면 빈 배열],"area":"지역명 예: 서울 용산"}]`;}
@@ -320,25 +325,25 @@ async function gemini(prompt,loc,opt={}){
   const sets=opt.tools===false?[{tools:null,tc:null}]:[{tools:[{googleMaps:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:null},{tools:[{googleMaps:{}},{googleSearch:{}}],tc:ll}];
   let lastErr='',lastStatus=0,timeouts=0;
   for(const set of sets){
-    const body={contents:[{role:'user',parts:[{text:prompt}]}]};if(set.tools)body.tools=set.tools;if(set.tc)body.toolConfig=set.tc;
+    const body={contents:[{role:'user',parts:[{text:prompt}]}]};if(opt.config)body.generationConfig=opt.config;if(set.tools)body.tools=set.tools;if(set.tc)body.toolConfig=set.tc;
     for(let attempt=0;attempt<2;attempt++){
       let r;try{r=await post(url,body,opt.timeout||45000);}
-      catch(e){if(e.name==='AbortError'){timeouts++;if(timeouts>=2)throw new Error('구글 응답이 너무 늦어요. 잠시 후 다시 하거나 더 빠른 모델(lite)로 바꿔보세요.');continue;}
+      catch(e){if(e.name==='AbortError'){timeouts++;if(timeouts>=2)throw new Error('구글 응답이 너무 늦어. 잠깐 있다 다시 하거나 더 빠른 모델(lite)로 바꿔봐.');continue;}
         lastErr='net';await sleep(1200);continue;}
       if(r.ok){const j=await r.json();const c=j.candidates?.[0]||{};const gm=c.groundingMetadata||{};
         return {text:(c.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join(''),raw:gm.groundingChunks||[],
           chunks:(gm.groundingChunks||[]).map(x=>x.maps).filter(Boolean),supports:gm.groundingSupports||[]};}
       const t=await r.text();lastStatus=r.status;
       try{lastErr=JSON.parse(t).error?.message||t;}catch(e){lastErr=t;}
-      if(r.status===429){throw new Error(/free|limit: ?0/i.test(lastErr)?'무료 API 키로는 구글맵 확인을 쓸 수 없어요. 구글 AI Studio에서 결제를 연결해야 해요.':'구글맵 확인 한도를 넘었어요. 잠시 후 다시 해주세요.');}
+      if(r.status===429){throw new Error(/free|limit: ?0/i.test(lastErr)?'무료 API 키로는 구글맵 확인을 못 써. 구글 AI Studio에서 결제를 연결해야 해.':'구글맵 확인 한도를 넘었대. 잠깐 있다 다시 해줘.');}
       if(r.status===503||r.status===500){await sleep(1500);continue;}
-      if(/API key not valid|API_KEY_INVALID/i.test(lastErr))throw new Error('API 키를 확인해주세요.');
-      if(r.status===404)throw new Error('모델 이름을 확인해주세요: '+model);
+      if(/API key not valid|API_KEY_INVALID/i.test(lastErr))throw new Error('API 키 한번 확인해줘.');
+      if(r.status===404)throw new Error('모델 이름 확인해줘: '+model);
       break;
     }
   }
-  if(lastErr==='net')throw new Error('인터넷 연결을 확인해주세요.');
-  throw new Error(`구글 요청이 거절됐어요. (${lastStatus||'시간 초과'}) ${String(lastErr).slice(0,160)}`);
+  if(lastErr==='net')throw new Error('인터넷 연결 확인해줘.');
+  throw new Error(`구글이 요청을 거절했어. (${lastStatus||'시간 초과'}) ${String(lastErr).slice(0,160)}`);
 }
 const norm=s=>String(s||'').toLowerCase().normalize('NFKC').replace(/[\s·・\-_,.()（）\[\]【】'"`~!@#$%^&*+=:;/\\|<>?]/g,'');
 function matchChunk(card,res){const keys=[card.mapsTitle,card.name].map(norm).filter(k=>k.length>=2);
@@ -411,26 +416,26 @@ async function fetchCards(nT,nR,bg){const setStage=bg?()=>{}:window.setStage;
     const fresh=r2.chunks.filter(ch=>!usedPid.has(String(ch.placeId||'').replace(/^places\//,'')));
     if(fresh.length){setStage('확인된 곳 정리 중');try{(await describeChunks(fresh.slice(0,want),r2.text,nR)).forEach(add);}catch(e){}}}
   const full=got.filter(c=>c.line1||c.line2);if(full.length>=5)got=full;
-  if(!got.length&&!S.cards.length)throw new Error(`구글맵에서 확인된 곳을 못 찾았어요. 지역을 넣어서 다시 말해주세요.<div class="hint">${esc(DIAG)}</div>`);
+  if(!got.length&&!S.cards.length)throw new Error(`구글맵에서 확인된 곳을 못 찾았어… 지역을 넣어서 다시 말해줄래?<div class="hint">${esc(DIAG)}</div>`);
   return got;}
 
 /* ---------- search flow ---------- */
 async function startSearch(txt){
-  if(!DB.settings.key.trim()){openSettings('먼저 제미나이 API 키를 넣어주세요.');return;}
+  if(!DB.settings.key.trim()){openSettings('먼저 제미나이 API 키를 넣어줘.');return;}
   S.gen++;S.fetching=false;S.emptyRefills=0;
   S.mode='loading';S.req=txt;S.queue=[];S.cards=[];S.pins=[];S.shownNames=[];S.groupId=null;S.area='';
   showDlg(false);charEl.classList.add('gone');$('#mainShade').style.opacity=.45;
   LD.stage='위치 확인 중';await sleep(700);showLoading();
   S.loc=await getLoc();
-  try{const got=await fetchCards(10,5);if(!got.length)throw new Error('지금 갈 만한 곳을 확인하지 못했어요.');
+  try{const got=await fetchCards(10,5);if(!got.length)throw new Error('지금 갈 만한 곳을 확인 못 했어.');
     S.area=got.find(c=>c.area)?.area||'';
     const t=got.filter(c=>c.kind==='taste'),r=got.filter(c=>c.kind==='random');
     const first=[];const pattern=['t','t','r','t','t','r','t','r','t'];
     for(const p of pattern){const src=p==='r'?(r.length?r:t):(t.length?t:r);if(src.length)first.push(src.shift());}
     S.queue=[...t,...r];S.cards=first;first.concat(S.queue).forEach(c=>S.shownNames.push(c.name));
     hideLoading();showCards();geocodeMissing();refill();  // prefetch the next batch right away
-    if(!S.loc)toast('현재 위치를 못 받아서 거리 표시가 빠져요');
-  }catch(e){hideLoading();backToIdle();say((/<div/.test(e.message)?e.message:esc(e.message||'문제가 생겼어요.'))+'<br>꾹 눌러서 다시 말해주세요.');}
+    if(!S.loc)toast('현재 위치를 못 받아서 거리 표시는 빠져');
+  }catch(e){hideLoading();backToIdle();say((/<div/.test(e.message)?e.message:esc(e.message||'뭔가 문제가 생겼어.'))+'<br>꾹 눌러서 다시 말해줘.');}
 }
 function backToIdle(){S.gen++;S.queue=[];S.mode='idle';S.cards=[];S.pins=[];$('#cardLayer').classList.add('hidden');$('#dimmer').classList.remove('on');
   $('#mainShade').style.opacity=.30;charEl.classList.remove('gone','front');showDlg(true);sayIdle();}
@@ -519,14 +524,14 @@ function edgePull(listEl,onTop,onBottom){let y0=null,edge=null;
 function cardsResume(){S.mode='cards';charEl.classList.add('gone');setTimeout(()=>charEl.classList.remove('front'),700);$('#dimmer').classList.remove('on');setTimeout(()=>showDlg(false),10);}
 edgePull($('#cardList'),()=>{if(S.mode!=='cards')return;SFX.btn();S.mode='clearConfirm';
   $('#dimmer').classList.add('on');charEl.classList.add('front');charEl.classList.remove('gone');showDlg(true);
-  say('추천 카드를 지울까요?<div class="hint">오른쪽으로 밀어 저장한 카드만 보관함에 남아요.</div>',{choices:[{label:'네',fn:()=>backToIdle()},{label:'아니요',fn:cardsResume}]});});
+  say('추천 카드 지울까?<div class="hint">오른쪽으로 밀어서 저장한 카드만 보관함에 남아.</div>',{choices:[{label:'응',fn:()=>backToIdle()},{label:'아니',fn:cardsResume}]});});
 
 /* route confirm (main, with Miyeon) */
 $('#routeBtn').onclick=()=>{if(!S.pins.length)return;SFX.btn();const pc=pinnedCards(S.cards,S.pins);S.mode='routeConfirm';
   $('#dimmer').classList.add('on');charEl.classList.add('front');charEl.classList.remove('gone');showDlg(true);
-  say(`<span class="q">${pc.map(c=>esc(c.name)).join(', ')}</span><br>이 순서로 동선 짜볼까요?`,{choices:[
-    {label:'네',fn:()=>openRoute(pc,'cards',S.req)},
-    {label:'아니요',fn:cardsResume}]});};
+  say(`<span class="q">${pc.map(c=>esc(c.name)).join(', ')}</span><br>이 순서로 동선 짜볼까?`,{choices:[
+    {label:'응',fn:()=>openRoute(pc,'cards',S.req)},
+    {label:'아니',fn:cardsResume}]});};
 
 /* ---------- external links ---------- */
 function gSearch(c){const q=encodeURIComponent(searchText(c));return `https://www.google.com/maps/search/?api=1&query=${q}${c.placeId?`&query_place_id=${encodeURIComponent(c.placeId)}`:''}`;}
@@ -548,7 +553,7 @@ function openDetail(c){SFX.btn();const d=distM(S.loc,c);
     ${d!=null?`<div class="row">현재 위치에서 도보 ${walkMin(d)}분 · ${fmtKm(d)}</div>`:''}
     ${c.address?`<div class="sub" style="margin-top:6px">${esc(c.address)}</div>`:''}
     ${c.tags.length?`<div class="tags">${c.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:''}
-    <div class="btnrow${btns.length>3?' four':''}">${btns.join('')}</div></div><div class="closehint">바깥을 누르면 닫혀요</div>`;
+    <div class="btnrow${btns.length>3?' four':''}">${btns.join('')}</div></div><div class="closehint">바깥을 누르면 닫혀</div>`;
   ov.addEventListener('click',e=>{if(e.target===ov||e.target.classList.contains('closehint'))ov.remove();});
   ov.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{SFX.btn();const l=b.dataset.l;
     if(l==='g')openGoogle(gSearch(c));
@@ -571,7 +576,7 @@ function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);l
     const d=new Date(e.date);$('#routeMeta').textContent=`${d.getMonth()+1}월 ${d.getDate()}일${e.request?' · '+e.request:''}`;
     const n=DB.routes.length;$('#routeDots').innerHTML=`<b class="arw${R.idx>0?'':' off'}" data-d="-1">◀</b>`+DB.routes.map((_,i)=>`<i class="${i===R.idx?'on':''}"></i>`).join('')+`<b class="arw${R.idx<n-1?'':' off'}" data-d="1">▶</b>`;
     $('#routeDots').querySelectorAll('.arw').forEach(a=>a.onclick=()=>{const d=+a.dataset.d;if(a.classList.contains('off'))return;pageHist(R.idx+d,d);});}
-  else{$('#routeTitle').textContent='이동 순서';$('#routeMeta').textContent='카드를 끌어서 순서를 바꿀 수 있어요.';$('#routeDots').innerHTML='';}
+  else{$('#routeTitle').textContent='이동 순서';$('#routeMeta').textContent='카드를 끌어서 순서를 바꿀 수 있어.';$('#routeDots').innerHTML='';}
   if(S.loc)html+=`<div class="rstart gbox"><i></i>현재 위치</div>`;
   R.items.forEach((c,i)=>{const lg=S.loc?legs[i]:(i>0?legs[i-1]:null);
     if(lg){const d=lg.d;const ch=changed.has(lg.key);
@@ -579,7 +584,7 @@ function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);l
       html+=`<div class="leg${ch?' chg':''}"><div>도보 ${d!=null?walkMin(d)+'분':'—'}</div><div>대중교통 ${d!=null?transitTxt(d):'—'}</div>${ch?'<span class="upd">갱신</span>':''}</div>`;}
     html+=`<div class="rcard gbox" data-i="${i}"><div class="n">${i+1}</div><div class="bar"></div><div class="tx"><div class="t">${esc(c.name)}</div><div class="l">${esc(c.address||c.line1)}</div></div><div class="h"><b></b><b></b><b></b></div></div>`;});
   if(legs.length&&legs.some(l=>l.d!=null))html+=`<div class="total">총 이동&nbsp;&nbsp;<b>도보 ${tw}분 · 대중교통 약 ${tt}분</b></div>`;
-  if(!S.loc)html+=`<div class="total">현재 위치를 못 받았어요. 설정에서 위치를 확인해 주세요.</div>`;
+  if(!S.loc)html+=`<div class="total">현재 위치를 못 받았어. 설정에서 위치를 확인해줘.</div>`;
   box.innerHTML=html;
   box.querySelectorAll('.rcard').forEach(el=>el.querySelector('.h').addEventListener('pointerdown',e=>startDrag(e,el)));
   /* places in Korea → 네이버 · 카카오 · 구글 (네이버 first: best walking routes); abroad → Google only */
@@ -644,7 +649,7 @@ function startDrag(e,el){e.preventDefault();e.stopPropagation();audio();const bo
   box.addEventListener('touchend',()=>{if(!s)return;const dx=s.dx;s=null;if(!horiz)return;horiz=false;
     const dir=dx<0?1:-1,ni=R.idx+dir;
     if(Math.abs(dx)<60||ni<0||ni>=DB.routes.length){box.style.transition='transform .28s cubic-bezier(.3,1.6,.5,1),opacity .2s';box.style.transform='';box.style.opacity='';
-      if(Math.abs(dx)>=60){SFX.touch();toast(ni<0?'가장 최근 동선이에요':'더 지난 동선은 없어요',1300);}return;}
+      if(Math.abs(dx)>=60){SFX.touch();toast(ni<0?'이게 제일 최근 동선이야':'더 지난 동선은 없어',1300);}return;}
     pageHist(ni,dir);},{passive:true});})();
 let paging=false;
 async function pageHist(ni,dir){if(paging||ni<0||ni>=DB.routes.length)return;paging=true;const box=$('#rlist');SFX.swipe();
@@ -653,7 +658,7 @@ async function pageHist(ni,dir){if(paging||ni<0||ni>=DB.routes.length)return;pag
   box.style.transition='transform .22s cubic-bezier(.2,1.3,.5,1),opacity .18s';box.style.transform='';box.style.opacity='';
   const t=$('#routeTitle');t.classList.remove('flash');void t.offsetWidth;t.classList.add('flash');await sleep(230);paging=false;}
 function showHist(i){R.mode='hist';R.idx=i;R.entry=DB.routes[i];R.items=R.entry.items;R.kIdx=0;renderRoute(new Set());}
-function toRouteHistory(){if(!DB.routes.length){toast('아직 저장된 동선이 없어요');return;}
+function toRouteHistory(){if(!DB.routes.length){toast('아직 저장된 동선이 없어');return;}
   stepFade($('#room'),-1,()=>{$('#room').classList.add('hidden');$('#route').classList.remove('hidden');$('#route').classList.add('hist');
     SCREEN='route';music();S.routeFrom='room';showHist(0);getLoc().then(l=>{if(l){S.loc=l;renderRoute(new Set());}});});}
 
@@ -664,7 +669,7 @@ function fmtDate(t){const d=new Date(t);return `${d.getMonth()+1}월 ${d.getDate
 function renderRoom(){const L=$('#roomList');$('#tabSaved').classList.toggle('on',roomTab==='saved');$('#tabPassed').classList.toggle('on',roomTab==='passed');
   $('#tabSaved').textContent=`저장 ${allSaved().length}`;$('#tabPassed').textContent=`지나친 카드 ${DB.passed.length}`;
   if(roomTab==='saved'){
-    if(!DB.groups.length){L.innerHTML='<div class="empty">아직 저장한 곳이 없어요.<br>추천 카드를 오른쪽으로 밀면 여기 모여요.</div>';}
+    if(!DB.groups.length){L.innerHTML='<div class="empty">아직 저장한 곳이 없어.<br>추천 카드를 오른쪽으로 밀면 여기 모여.</div>';}
     else L.innerHTML=DB.groups.map(g=>`<div class="ghead${g.id===sparkleId?' sparkle':''}"><div class="gq">“${esc(g.request)}”</div><div class="gm">${fmtDate(g.date)}${g.area?' · '+esc(g.area):''}</div></div>`+
       g.cards.map(c=>cardHTML(c).replace('class="cw"',`class="cw${c._spark?' sparkle':''}"`)).join('')).join('');
     L.querySelectorAll('.cw').forEach(w=>{const c=allSaved().find(x=>x.id===w.dataset.id),card=w.querySelector('.card');
@@ -673,8 +678,8 @@ function renderRoom(){const L=$('#roomList');$('#tabSaved').classList.toggle('on
         if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
     allSaved().forEach(c=>delete c._spark);sparkleId=null;save();
   }else{
-    L.innerHTML='<div class="note">오른쪽으로 밀면 다시 저장돼요. 10일 지나면 사라져요.</div>'+(DB.passed.length?DB.passed.map(p=>{const left=Math.max(1,10-Math.floor((Date.now()-p.at)/864e5));
-      return cardHTML(p.card,`<span class="left${left<=2?' soon':''}">${left}일 남음</span>`).replace('<div class="under save">저장</div>','<div class="under save">되살리기</div>');}).join(''):'<div class="empty">지나친 카드가 없어요.</div>');
+    L.innerHTML='<div class="note">오른쪽으로 밀면 다시 저장돼. 10일 지나면 사라져.</div>'+(DB.passed.length?DB.passed.map(p=>{const left=Math.max(1,10-Math.floor((Date.now()-p.at)/864e5));
+      return cardHTML(p.card,`<span class="left${left<=2?' soon':''}">${left}일 남음</span>`).replace('<div class="under save">저장</div>','<div class="under save">되살리기</div>');}).join(''):'<div class="empty">지나친 카드가 없어.</div>');
     L.querySelectorAll('.cw').forEach(w=>{const p=DB.passed.find(x=>x.card.id===w.dataset.id),card=w.querySelector('.card');
       gestures(w,card,{onLong:()=>openDetail(p.card),onRight:()=>{DB.passed=DB.passed.filter(x=>x!==p);
         let g=DB.groups.find(x=>x.id===p.groupId);if(!g){g={id:p.groupId||uid(),request:p.request,date:p.date||Date.now(),area:p.area||'',cards:[]};DB.groups.unshift(g);}
@@ -696,8 +701,8 @@ $('#roomRouteBtn').onclick=()=>{SFX.btn();const pc=pinnedCards(allSaved(),roomPi
   const req=(DB.groups.find(g=>g.cards.includes(pc[0]))||{}).request||'';
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px"><div class="tagname" style="background:var(--cream)">동선 짜기</div><div class="win px solid">
     ${pc.map((c,i)=>`<div class="row"><span style="color:var(--gold);margin-right:10px">${i+1}</span>${esc(c.name)}</div>`).join('')}
-    <div class="row" style="margin-top:20px">이 순서로 동선 짜볼까요?</div>
-    <div class="btnrow"><button class="px gold" id="pyes" style="color:var(--bdark)">네</button><button class="px" id="pno" style="color:var(--beige)">아니요</button></div></div></div>`;
+    <div class="row" style="margin-top:20px">이 순서로 동선 짜볼까?</div>
+    <div class="btnrow"><button class="px gold" id="pyes" style="color:var(--bdark)">응</button><button class="px" id="pno" style="color:var(--beige)">아니</button></div></div></div>`;
   $('#room').appendChild(ov);ov.querySelector('#pyes').onclick=()=>{ov.remove();openRoute(pc,'room',req);};ov.querySelector('#pno').onclick=()=>{SFX.btn();ov.remove();};};
 edgePull($('#roomList'),()=>{if(!$('#room').classList.contains('hidden'))toMain();},()=>{if(!$('#room').classList.contains('hidden'))toRouteHistory();});
 
@@ -722,10 +727,10 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     ${msg?`<div class="sub" style="color:var(--yel);margin-bottom:10px">${esc(msg)}</div>`:''}
     <div class="row" style="margin-top:4px">제미나이 API 키</div>
     <div class="field"><input id="sKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.key)}" placeholder="AIza…"><button class="px gold" id="sPaste" style="padding:2px 8px;font-size:12px;font-weight:700">붙여넣기</button></div>
-    <div class="small" id="sKeyHint">키는 이 폰에만 저장돼요. 체험만 하려면 demo 라고 넣으세요.</div>
+    <div class="small" id="sKeyHint">키는 이 폰에만 저장돼. 체험만 하려면 demo 라고 넣어.</div>
     <div class="row" style="margin-top:16px">제미나이 모델</div>
     <div class="field"><input id="sModel" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.model)}"></div>
-    <div class="small">모델 이름을 직접 입력해요. 기본: ${DEFAULT_MODEL}</div>
+    <div class="small">모델 이름을 직접 입력해. 기본: ${DEFAULT_MODEL}</div>
     <div class="sep"></div><div class="row" style="margin-top:0">현재 위치</div>
     <div class="locbox" id="sLoc">확인 중…</div>
     <div class="minibtns"><button class="px" id="sLocRe">GPS로 다시 받기</button><button class="px" id="sLocFix">지도에서 고치기</button></div>
@@ -733,14 +738,14 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     <div class="sep"></div>
     <button class="chk ${music?'on':'off'}" id="sMusic" style="margin-top:0"><i></i>배경음악</button>
     <div class="sep"></div><div class="row" style="margin-top:0">소리 실험</div>
-    <div class="small">다른 앱에 다녀와서 소리가 작아졌을 때 하나씩 눌러보고, 소리가 돌아오는 버튼을 알려주세요.</div>
+    <div class="small">다른 앱에 다녀와서 소리가 작아졌을 때 하나씩 눌러보고, 소리가 돌아오는 버튼을 알려줘.</div>
     <div class="minibtns"><button class="px" data-st="A">A 재생 모드</button><button class="px" data-st="B">B 오디오 요소</button><button class="px" data-st="C">C 무음 재생</button></div>
     <div class="btnrow"><button class="px gold" id="sSave">저장</button><button class="px" id="sClose" style="color:var(--muted)">닫기</button></div>
     <div class="small" style="text-align:center;margin-top:12px">여행선배 v${VERSION}</div></div></div>`;
   $('#overlayHost').appendChild(ov);showDlg(false);
   const locBox=ov.querySelector('#sLoc');let shown=null;
   const showLoc=async(force)=>{locBox.innerHTML='확인 중…';const l=await getLoc(force);shown=l;
-    if(!l){locBox.innerHTML=`<span class="err">${esc(LOCERR||'위치를 받지 못했어요.')}</span>`;return;}
+    if(!l){locBox.innerHTML=`<span class="err">${esc(LOCERR||'위치를 못 받았어.')}</span>`;return;}
     const age=Math.round((Date.now()-l.at)/60000);
     locBox.innerHTML=(l.manual?`<div style="color:var(--gold)">■ 직접 고친 위치 (6시간 동안 사용)</div>`:'')+`<b>${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}</b> <span style="color:var(--muted)">${l.manual?'':`±${l.acc||'?'}m`}${age>0?` · ${age}분 전`:''}</span><div id="sLocName" style="color:var(--yel)">${esc(l.label||'')}</div>${LOCERR?`<div class="err">${esc(LOCERR)}</div>`:''}`;
     if(!l.label){const name=await placeLabel(l);if(name){l.label=name;if(DB.lastLoc&&DB.lastLoc.at===l.at){DB.lastLoc.label=name;save();}if(DB.manualLoc&&DB.manualLoc.at===l.at){DB.manualLoc.label=name;save();}const n=ov.querySelector('#sLocName');if(n)n.textContent=name;}}};
@@ -748,23 +753,23 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
   const setManual=(lat,lng)=>{DB.manualLoc={lat,lng,acc:0,at:Date.now(),manual:true,label:''};save();S.loc=DB.manualLoc;SFX.pin();showLoc(false);};
   ov.querySelector('#sLocRe').onclick=()=>{SFX.btn();DB.manualLoc=null;save();showLoc(true);};
   ov.querySelector('#sLocFix').onclick=()=>{SFX.btn();pickOnMap(shown,setManual);};
-  ov.querySelector('#sLocMap').onclick=()=>{SFX.btn();if(!shown){toast('먼저 위치를 받아주세요');return;}openGoogle(`https://www.google.com/maps/search/?api=1&query=${shown.lat},${shown.lng}`);};
+  ov.querySelector('#sLocMap').onclick=()=>{SFX.btn();if(!shown){toast('먼저 위치를 받아줘');return;}openGoogle(`https://www.google.com/maps/search/?api=1&query=${shown.lat},${shown.lng}`);};
   ov.querySelector('#sLocPaste').onclick=async()=>{SFX.btn();let t='';try{t=await navigator.clipboard.readText();}catch(e){}
     const ask=()=>{const box=document.createElement('div');box.className='overlay';box.innerHTML=`<div class="win px solid" style="max-width:380px;width:100%"><div class="row" style="margin-top:0">구글맵 좌표 붙여넣기</div>
-      <div class="small">구글맵에서 원하는 곳을 꾹 눌러 핀을 꽂으면 위에 37.5299, 126.9648 같은 좌표가 떠요. 그걸 눌러 복사한 뒤 아래 칸을 길게 눌러 붙여넣으세요.</div>
+      <div class="small">구글맵에서 원하는 곳을 꾹 눌러 핀을 꽂으면 위에 37.5299, 126.9648 같은 좌표가 떠. 그걸 눌러 복사한 다음 아래 칸을 길게 눌러서 붙여넣어.</div>
       <div class="field"><input id="cpIn" placeholder="37.5299, 126.9648" autocomplete="off"></div>
       <div class="btnrow"><button class="px gold" id="cpOk">이 위치로</button><button class="px" id="cpNo" style="color:var(--muted)">취소</button></div></div>`;
       $('#overlayHost').appendChild(box);const i=box.querySelector('#cpIn');if(t)i.value=t;setTimeout(()=>i.focus(),50);
       box.querySelector('#cpNo').onclick=()=>{SFX.btn();box.remove();};
-      box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어요. 37.5, 127.0 같은 숫자를 넣어주세요');return;}box.remove();setManual(p.lat,p.lng);};};
+      box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어. 37.5, 127.0 같은 숫자를 넣어줘');return;}box.remove();setManual(p.lat,p.lng);};};
     const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
   ov.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>soundTest(b.dataset.st));
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
   const keyIn=ov.querySelector('#sKey');
   ov.querySelector('#sPaste').onclick=async()=>{SFX.btn();let t='';
     try{if(navigator.clipboard&&navigator.clipboard.readText)t=await navigator.clipboard.readText();}catch(e){}
-    if(t&&t.trim()){keyIn.type='text';keyIn.value=t.trim();setTimeout(()=>keyIn.type='password',1500);ov.querySelector('#sKeyHint').textContent='붙여넣었어요. 저장을 눌러주세요.';}
-    else{keyIn.type='text';keyIn.focus();keyIn.select();ov.querySelector('#sKeyHint').innerHTML='<span style="color:var(--yel)">입력칸을 길게 눌러 "붙여넣기"를 골라주세요.</span>';}};
+    if(t&&t.trim()){keyIn.type='text';keyIn.value=t.trim();setTimeout(()=>keyIn.type='password',1500);ov.querySelector('#sKeyHint').textContent='붙여넣었어. 저장 눌러줘.';}
+    else{keyIn.type='text';keyIn.focus();keyIn.select();ov.querySelector('#sKeyHint').innerHTML='<span style="color:var(--yel)">입력칸을 길게 눌러서 "붙여넣기"를 골라줘.</span>';}};
   const close=()=>{ov.remove();showDlg(true);
     if(!DB.profile.done&&DB.settings.key.trim())startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
@@ -792,11 +797,11 @@ function loadLeaflet(){if(window.L&&window.L.map)return Promise.resolve();if(lea
     const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';s.onload=res;s.onerror=()=>{leafletP=null;rej();};document.head.appendChild(s);});return leafletP;}
 async function pickOnMap(start,done){const ov=document.createElement('div');ov.className='overlay';ov.style.padding='0';
   ov.innerHTML=`<div class="picker"><div id="pmap"></div><div class="cross"></div>
-    <div class="ptop"><div class="px solid pmsg">지도를 움직여서 가운데 핀을 지금 있는 곳에 맞춰주세요.</div>
+    <div class="ptop"><div class="px solid pmsg">지도를 움직여서 가운데 핀을 지금 있는 곳에 맞춰줘.</div>
       <div class="psearch"><input id="pQ" placeholder="장소·주소로 찾기 (예: 시부야역)" enterkeyhint="search" autocomplete="off"><button class="px gold" id="pGo">찾기</button></div></div>
     <div class="pbtm"><button class="px gold" id="pOk">이 위치로</button><button class="px" id="pNo">취소</button></div></div>`;
   $('#overlayHost').appendChild(ov);ov.querySelector('#pNo').onclick=()=>{SFX.btn();ov.remove();};
-  try{await loadLeaflet();}catch(e){ov.remove();toast('지도를 불러오지 못했어요. 인터넷 연결을 확인해 주세요');return;}
+  try{await loadLeaflet();}catch(e){ov.remove();toast('지도를 못 불러왔어. 인터넷 연결 확인해줘');return;}
   const c=start||DB.lastLoc||{lat:37.5665,lng:126.9780};const Lf=window.L;
   const map=Lf.map(ov.querySelector('#pmap'),{zoomControl:false,attributionControl:true}).setView([c.lat,c.lng],start?17:12);
   /* Korea: OSM (Korean labels). Abroad: Esri street map (English labels, readable) */
@@ -807,34 +812,34 @@ async function pickOnMap(start,done){const ov=document.createElement('div');ov.c
   const q=ov.querySelector('#pQ');
   const go=async()=>{const v=q.value.trim();if(!v)return;q.blur();SFX.btn();
     try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(v)}`);const j=await r.json();
-      if(j&&j[0]){map.setView([+j[0].lat,+j[0].lon],17);}else toast('못 찾았어요. 더 큰 지명이나 주소로 해보세요');}catch(e){toast('검색이 안 돼요. 지도를 직접 움직여 주세요');}};
+      if(j&&j[0]){map.setView([+j[0].lat,+j[0].lon],17);}else toast('못 찾았어. 더 큰 지명이나 주소로 해봐');}catch(e){toast('검색이 안 돼. 지도를 직접 움직여줘');}};
   ov.querySelector('#pGo').onclick=go;q.onkeydown=e=>{if(e.key==='Enter')go();};
   ov.querySelector('#pOk').onclick=()=>{const p=map.getCenter();ov.remove();done(+p.lat.toFixed(6),+p.lng.toFixed(6));};}
 
 /* ---------- tutorial ---------- */
 const SITU=[
-  ['비 오는 오후 3시, 낯선 도시예요.',['박물관이나 미술관','분위기 좋은 카페','현지 시장 구경']],
-  ['저녁 8시, 꽤 걸어서 다리가 아파요.',['루프탑 바에서 한잔','숙소 근처 현지 맛집','야경 보며 천천히 산책']],
-  ['아침 일찍 눈이 떠졌어요.',['동네 산책이나 공원','운동 한 번','유명한 빵집 오픈런']],
-  ['일정 사이에 2시간이 비었어요.',['골목 구경','쇼핑이나 편집숍','공연이나 체험 하나']],
-  ['오늘은 혼자예요.',['조용한 바에서 한잔','책방이나 레코드 가게','사람 많은 핫플 구경']]];
+  ['비 오는 오후 3시, 낯선 도시야.',['박물관이나 미술관','분위기 좋은 카페','현지 시장 구경']],
+  ['저녁 8시, 꽤 걸어서 다리가 아파.',['루프탑 바에서 한잔','숙소 근처 현지 맛집','야경 보며 천천히 산책']],
+  ['아침 일찍 눈이 떠졌어.',['동네 산책이나 공원','운동 한 번','유명한 빵집 오픈런']],
+  ['일정 사이에 2시간이 비었어.',['골목 구경','쇼핑이나 편집숍','공연이나 체험 하나']],
+  ['오늘은 혼자야.',['조용한 바에서 한잔','책방이나 레코드 가게','사람 많은 핫플 구경']]];
 const ROUNDS=[['볼 거리',['미술관','건축','야경','공연','박물관','자연·공원']],['먹을 거리',['커피','디저트','로컬 식당','시장','술집','길거리 음식']],
   ['할 거리',['운동','산책','쇼핑','체험·클래스','서점·음반','사진 찍기']]];
 function startTutorial(){S.mode='tutorial';const P=DB.profile;P.situations=[];P.interests=[];showDlg(true);
-  say('처음 뵙네요, 미연이에요.<br>취향을 조금만 알려주시면 더 잘 골라드릴게요.',{choices:[{label:'시작하기',fn:()=>situ(0)},{label:'건너뛰기',fn:finishTut}]});}
+  say('안녕! 난 미연이야. 네 여행선배!<br>취향을 조금만 알려주면 선배가 딱딱 골라줄게.',{choices:[{label:'시작하기',fn:()=>situ(0)},{label:'건너뛰기',fn:finishTut}]});}
 function tutBox(html){const t=$('#tut');t.innerHTML=html;t.classList.remove('hidden');return t;}
 function situ(i){if(i>=SITU.length)return round(0);const [q,opts]=SITU[i];
-  say(`이럴 땐 뭐가 끌려요? <span style="color:var(--muted);font-weight:400">(${i+1}/5)</span>`,{cursor:false});
-  const t=tutBox(`<div class="opts px solid"><div class="q">${esc(q)}</div>${opts.map((o,k)=>`<button class="opt px" data-k="${k}">${esc(o)}</button>`).join('')}<button class="opt px" data-k="-1" style="color:var(--muted)">다 별로예요</button></div>`);
+  say(`이럴 땐 뭐가 끌려? <span style="color:var(--muted);font-weight:400">(${i+1}/5)</span>`,{cursor:false});
+  const t=tutBox(`<div class="opts px solid"><div class="q">${esc(q)}</div>${opts.map((o,k)=>`<button class="opt px" data-k="${k}">${esc(o)}</button>`).join('')}<button class="opt px" data-k="-1" style="color:var(--muted)">다 별로야</button></div>`);
   t.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{SFX.btn();const k=+b.dataset.k;DB.profile.situations.push(k<0?`${q} → 다 별로`:`${q} → ${opts[k]}`);situ(i+1);});}
 function round(i){if(i>=ROUNDS.length)return finishTut();const [name,opts]=ROUNDS[i];let pick=[];
-  say(`${esc(name)} 중에 딱 3개만 골라주세요.`,{cursor:false});
+  say(`${esc(name)} 중에 딱 3개만 골라줘.`,{cursor:false});
   const draw=()=>{const t=tutBox(`<div class="opts px solid"><div class="q">${esc(name)} <span class="count">${pick.length}/3</span></div><div class="grid">${opts.map(o=>`<button class="chip px${pick.includes(o)?' on':''}">${esc(o)}</button>`).join('')}</div>
       <button class="next px ${pick.length?'gold':''}" ${pick.length?'':'style="color:var(--muted)"'}>${i<2?'다음':'끝'}</button></div>`);
     t.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{const o=b.textContent;if(pick.includes(o)){pick=pick.filter(x=>x!==o);SFX.touch();}else if(pick.length<3){pick.push(o);SFX.pin();}else{b.classList.add('shake');setTimeout(()=>b.classList.remove('shake'),400);return;}draw();});
     t.querySelector('.next').onclick=()=>{if(!pick.length)return;SFX.btn();DB.profile.interests.push(...pick);round(i+1);};};draw();}
 function finishTut(){$('#tut').classList.add('hidden');DB.profile.done=true;save();S.mode='idle';
-  say('좋아요, 기억해둘게요.<br>이제 화면을 꾹 누른 채로 말해보세요.<div class="hint">예) 저녁 먹고 시부야에서 놀 거리</div>');}
+  say('좋아, 선배가 다 기억해둘게!<br>이제 화면을 꾹 누른 채로 말해봐.<div class="hint">예) 저녁 먹고 시부야에서 놀 거리</div>');}
 
 /* ---------- demo ---------- */
 const DEMO=[['시부야 스카이','SHIBUYA SKY','스크램블 스퀘어 옥상 전망대','해 진 뒤 교차로 야경이 최고','taste','야경·전망',35.6585,139.7023,'11:00–22:30',[]],
@@ -842,12 +847,12 @@ const DEMO=[['시부야 스카이','SHIBUYA SKY','스크램블 스퀘어 옥상 
  ['논베이 요코초','のんべい横丁','선로 옆 좁은 골목 작은 술집들','자리 몇 개뿐인 단골 분위기','taste','술집',35.6605,139.7027,'18:00–01:00',['현금만','흡연 가능']],
  ['푸글렌 도쿄','Fuglen Tokyo','밤엔 칵테일 바가 되는 카페','오쿠시부야 조용한 골목','taste','카페',35.6676,139.6927,'07:00–01:00',[]],
  ['JBS 재즈 바','JBS','주인장 LP가 벽을 채운 바','말없이 음악 듣기 좋은 곳','taste','공연·음악',35.6577,139.7005,'19:00–02:00',['현금만','좌석 10석 내외']],
- ['PARCO 갤러리 층','渋谷PARCO','전시·서브컬처 매장 모음','늦게까지 열어 구경하기 좋아요','taste','전시·미술',35.6620,139.6987,'11:00–21:00',[]],
+ ['PARCO 갤러리 층','渋谷PARCO','전시·서브컬처 매장 모음','늦게까지 열어서 구경하기 좋아','taste','전시·미술',35.6620,139.6987,'11:00–21:00',[]],
  ['타워레코드 시부야','TOWER RECORDS 渋谷店','층마다 장르가 다른 음반 매장','시청 코너에서 한참 머물기','taste','쇼핑',35.6618,139.7016,'11:00–22:00',[]],
  ['돈키호테 메가 시부야','MEGAドン・キホーテ渋谷本店','24시간 잡동사니 쇼핑 천국','기념품 사냥, 평소라면 안 갈 곳','random','쇼핑',35.6597,139.6985,'24시간',[]],
- ['히토카라','ひとからオケ','혼자 노래방 1시간','1인용 부스라 눈치 안 봐요','random','체험',35.6596,139.6990,'24시간',[]],
- ['게임센터 인형뽑기','タイトーステーション渋谷','센터가이 오락실에서 운 시험','일본식 크레인은 의외로 잘 뽑혀요','random','체험',35.6600,139.6993,'10:00–24:00',[]],
- ['오쿠시부야 책방','SHIBUYA PUBLISHING & BOOKSELLERS','작은 독립 서점','밤 산책 중 들르기 좋아요','taste','쇼핑',35.6640,139.6930,'12:00–22:00',[]],
+ ['히토카라','ひとからオケ','혼자 노래방 1시간','1인용 부스라 눈치 안 봐도 돼','random','체험',35.6596,139.6990,'24시간',[]],
+ ['게임센터 인형뽑기','タイトーステーション渋谷','센터가이 오락실에서 운 시험','일본식 크레인은 의외로 잘 뽑혀','random','체험',35.6600,139.6993,'10:00–24:00',[]],
+ ['오쿠시부야 책방','SHIBUYA PUBLISHING & BOOKSELLERS','작은 독립 서점','밤 산책 중에 들르기 좋아','taste','쇼핑',35.6640,139.6930,'12:00–22:00',[]],
  ['시부야 대중목욕탕','改良湯','동네 목욕탕에서 피로 풀기','수건 대여 가능','random','체험',35.6560,139.6960,'15:00–24:00',['현금만']],
  ['스크램블 교차로','渋谷スクランブル交差点','세계에서 제일 붐비는 횡단보도','2층 카페에서 내려다보기','taste','건축·명소',35.6595,139.7005,'24시간',[]],
  ['도겐자카 라멘 골목','道玄坂','늦게까지 하는 라멘집들','저녁 먹었어도 한 그릇?','random','음식점',35.6570,139.6965,'11:00–04:00',[]]];
@@ -857,13 +862,89 @@ function demoCards(nT,nR){const out=[];let t=0,r=0;for(let k=0;k<DEMO.length*2&&
   out.push({id:uid(),name:d[0],mapsTitle:d[1],placeId:'',mapsUri:'',line1:d[2],line2:d[3],kind:d[4],category:d[5],lat:d[6],lng:d[7],address:'도쿄도 시부야구',hours:d[8],open:true,tags:d[9],area:'도쿄 시부야'});}
   if(!S.loc)S.loc={lat:35.6590,lng:139.7006,acc:20,at:Date.now()};return out;}
 
+/* ---------- chat with 미연 (AI picks her line + 3~4 answers for you) ---------- */
+const MIYEON=`너는 여행 추천 앱 "여행선배"의 캐릭터 '미연'이야. 사용자의 여행 선배.
+성격: 순수하고 남을 먼저 배려해. 선배인 척 아는 척을 하지만 알고 보면 허당이야(아는 척하다 틀리고, 길을 헷갈리고, 말이 꼬이고, 그래도 혼자 뿌듯해함). 귀여워.
+자기가 예쁘고 인기 많다는 걸 전혀 몰라. 그래서 칭찬이나 설레는 말을 들으면 진심으로 당황하거나 엉뚱하게 받아들여(예: 자기 얘기가 아니라고 생각함).
+말투: 항상 반말. 대사는 1~2문장, 70자 이내. 이모지·이모티콘 금지. "헤헤", "앗", "음…" 같은 말버릇은 가끔만.
+사용자 이름은 모르니까 이름으로 부르지 마. 부를 일이 있으면 "후배"라고만.
+여기서는 가벼운 수다만 해. 실제 가게나 장소 이름을 지어내지 마.`;
+const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','미연이 요즘 연습하는 것'];
+const CHAT_MAX=3;  // how many answers you get to pick before she wraps up
+const C={hist:[],picks:0,gen:0,typing:null,ended:false,busy:false};
+function chatCtx(){const now=new Date();const loc=(manualLoc()||DB.lastLoc||{}).label||'';
+  const g=DB.groups[0],r=DB.routes[0];
+  return [`현지 시각: ${now.toLocaleString('ko-KR',{weekday:'short',hour:'numeric',minute:'2-digit'})}`,
+    loc?`지금 있는 곳: ${loc}`:'',g?`후배가 최근 앱에 한 요청: "${g.request}"`:'',
+    r?`최근에 짠 동선: ${r.items.map(c=>c.name).join(', ')}`:''].filter(Boolean).join('\n');}
+function chatPrompt(final){const first=!C.hist.length;
+  const log=C.hist.map(h=>(h.who==='m'?'미연: ':'후배: ')+h.text).join('\n');
+  if(!DB.chat)DB.chat={recent:[]};
+  return `${MIYEON}
+[상황]
+${chatCtx()}
+${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
+[최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
+[할 일] ${first?'미연이 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 미연이 반응해.'}${final?' 이번 대사로 대화를 귀엽게 마무리해. choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. 선택지는 후배가 미연에게 하는 반말 대사, 각 18자 이내. 서로 결이 다르게: 다정한 말, 장난스러운 말, 미연을 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
+mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 기분 좋으면 "smile", 그 밖엔 "normal".
+JSON 하나만 출력: {"line":"미연 대사","mood":"normal","choices":["..."],"end":false}`;}
+function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
+  if(!v||typeof v.line!=='string'||!v.line.trim())return null;
+  v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];return v;}catch(e){return null;}}
+const DEMO_CHAT=[
+  {line:'후배, 오늘 많이 걸었지? 선배가 보기엔 한 3만 보는 걸은 것 같아.',mood:'smile',choices:['선배 덕분에 하나도 안 힘들어','3만 보는 좀 오버 아니야?','선배는 오늘도 예쁘다','다리 대신 바퀴 달고 싶어']},
+  {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['선배 말한 거 맞아','뒤에 비둘기 있어','농담이야, 헤헤']},
+  {line:'헤헤, 아무튼 선배는 길 찾기 천재니까… 어, 근데 여기 어디지?',mood:'fluster',choices:['지도 앱 켜줄까?','천재 맞아?','같이 헤매도 재밌어']},
+  {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
+async function chatAsk(final){
+  if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final?{...d,...DEMO_CHAT[3]}:{...d};}
+  const r=await gemini(chatPrompt(final),null,{tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
+  const v=chatParse(r.text);if(!v)throw new Error('대답을 못 알아들었어');return v;}
+function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
+async function startChat(){
+  if(!DB.settings.key.trim()){say('앗, API 키가 없으면 선배가 말을 못 해…<div class="hint">설정에서 키를 넣어줘.</div>');return;}
+  S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();
+  chatThink('');await chatStep(false);}
+async function chatStep(final){const gen=C.gen;C.busy=true;
+  let v;try{v=await chatAsk(final);}
+  catch(e){if(gen!==C.gen)return;C.busy=false;
+    chatShow({line:'앗… 무슨 말 하려고 했는지 까먹었어. 헤헤.',mood:'fluster',choices:[],end:true},esc(e.message||''));return;}
+  if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
+  if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
+  C.hist.push({who:'m',text:v.line});
+  if(final||v.choices.length<2)v.end=true;
+  if(v.end)v.choices=[];chatShow(v);}
+function chatMood(m){const img=$('#charImg');img.src=m==='blush'?'miyeon_blush.png':'miyeon.png';
+  if(m==='fluster'){charEl.classList.remove('fluster');void charEl.offsetWidth;charEl.classList.add('fluster');}}
+/* typewriter; tap the box to show the whole line at once */
+function chatShow(v,errHint){chatMood(v.mood);const text=v.line.trim();let i=0;
+  dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');
+  const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
+    if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}">${esc(c)}</button>`).join('')+'</div>');
+      dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy)return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
+    else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
+  C.finishTyping=done;
+  C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);}
+function chatPick(t){C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(C.picks>=CHAT_MAX);}
+function chatTap(){if(C.typing){C.finishTyping();return;}if(C.ended)endChat();}
+function endChat(){C.gen++;C.ended=false;$('#charImg').src='miyeon.png';SFX.btn();sayIdle();}
+
+/* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
+function birdOk(){return S.mode==='idle'&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!recHold&&!rec&&!fading
+  &&!$('#overlayHost').children.length&&!charEl.classList.contains('pressed');}
+let birdT=null;
+function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{if(!window.BIRD)return;if(birdOk()){BIRD.visit();birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
+birdLater(60000+Math.random()*60000);
+setInterval(()=>{if(window.BIRD&&BIRD.busy&&!birdOk())BIRD.scare();},250);
+document.addEventListener('pointerdown',()=>{if(window.BIRD&&BIRD.busy)BIRD.scare();},{capture:true});
+
 /* ---------- boot ---------- */
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input'))e.preventDefault();lastTouch=n;},{passive:false});
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('input'))e.preventDefault();});
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
-if(!DB.settings.key.trim()){showDlg(true);say('안녕하세요, 여행선배 미연이에요.',{cursor:false});setTimeout(()=>openSettings('처음이시네요. 제미나이 API 키를 넣어주세요.'),600);}
+if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 미연이야.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
 else if(!DB.profile.done)startTutorial();
 else sayIdle();
 window.__S=S;window.__DB=DB;window.__R=R;

@@ -33,13 +33,22 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 
 /* main */
 #touch{position:absolute;inset:0;z-index:1;touch-action:none}
-#char{position:absolute;right:3.6%;bottom:3.4%;width:44.4%;z-index:3;pointer-events:none;transition:opacity .7s linear}
+#char{position:absolute;right:3.6%;bottom:3.4%;width:53.3%;z-index:3;pointer-events:none;transition:opacity .7s linear}
 #char img{width:100%;display:block;filter:drop-shadow(7px 6px 2px rgba(8,10,20,.5));image-rendering:auto}
 #char.pressed img{transform:translate(7px,6px);filter:none}
 #char.gone{opacity:0}
 #char.front{z-index:6}
-#dlgWrap{position:absolute;left:5.4%;right:5.4%;bottom:6.4%;z-index:7;pointer-events:none}
-#dlgWrap.active{pointer-events:auto}
+#char.fluster img{animation:fluster .5s steps(5)}
+@keyframes fluster{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+/* chat with 미연 */
+.choices.v{flex-direction:column;gap:0;margin-top:10px}
+.choices.v .choice{text-align:left;font-size:14px;line-height:1.4;padding:7px 0 7px 18px;color:#d6dcf2}
+.choices.v .choice:active,.choices.v .choice.sel{color:var(--yel)}
+.choices.v .choice.sel::before{border-left-color:var(--yel)}
+#dlg .me{color:var(--yel);font-size:13px;display:block;margin-bottom:4px}
+#dlg .think{letter-spacing:2px}
+#dlg .think::after{content:'';animation:dots 1.2s steps(4) infinite}
+#dlgWrap{position:absolute;left:5.4%;right:5.4%;bottom:6.4%;z-index:7;pointer-events:auto;touch-action:none}  /* tap the box = chat with 미연; hold = talk, same as the screen */
 #dlg{min-height:100px;padding:14px 18px 12px;font-weight:700;font-size:16px;line-height:1.5}
 #dlg .q{color:var(--yel)}
 #dlg .hint{color:var(--muted);font-weight:400;font-size:12px;margin-top:6px}
