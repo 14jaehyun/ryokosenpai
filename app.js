@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.14';
+const VERSION='2.0.15';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -903,6 +903,7 @@ async function chatAsk(final){
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
 async function startChat(){
   if(!DB.settings.key.trim()){say('앗, API 키가 없으면 선배가 말을 못 해…<div class="hint">설정에서 키를 넣어줘.</div>');return;}
+  charEl.classList.add('up');  // B안: rises 20% in 5 steps so the choices don't cover her
   S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();
   chatThink('');await chatStep(false);}
 async function chatStep(final){const gen=C.gen;C.busy=true;
@@ -920,14 +921,14 @@ function chatMood(m){const img=$('#charImg');img.src=m==='blush'?'miyeon_blush.p
 function chatShow(v,errHint){chatMood(v.mood);const text=v.line.trim();let i=0;
   dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');
   const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
-    if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}">${esc(c)}</button>`).join('')+'</div>');
+    if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c)}</button>`).join('')+'</div>');
       dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy)return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
     else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
   C.finishTyping=done;
   C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);}
 function chatPick(t){C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(C.picks>=CHAT_MAX);}
 function chatTap(){if(C.typing){C.finishTyping();return;}if(C.ended)endChat();}
-function endChat(){C.gen++;C.ended=false;$('#charImg').src='miyeon.png';SFX.btn();sayIdle();}
+function endChat(){C.gen++;C.ended=false;charEl.classList.remove('up');$('#charImg').src='miyeon.png';SFX.btn();sayIdle();}
 
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
 function birdOk(){return S.mode==='idle'&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!recHold&&!rec&&!fading
