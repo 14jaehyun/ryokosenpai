@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.8';
+const VERSION='2.0.9';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -47,7 +47,16 @@ function openGoogle(url){openExternal('comgooglemapsurl://'+url.replace(/^https?
 let AC=null,SFXOUT=null;
 function audio(){try{if(!AC){if(navigator.audioSession)navigator.audioSession.type='ambient';AC=new(window.AudioContext||window.webkitAudioContext)();
     SFXOUT=AC.createGain();SFXOUT.gain.value=1;SFXOUT.connect(AC.destination);}
-  if(AC.state==='suspended'&&!document.hidden)AC.resume();}catch(e){}return AC;}
+  if(AC.state!=='running'&&AC.state!=='closed'&&!document.hidden){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}}catch(e){}return AC;}
+/* iOS leaves the context 'interrupted' (not 'suspended') after leaving the app.
+   On any touch: if it isn't running, resume; if that doesn't take within 350ms, throw it away and build a new one. */
+let acFixing=null;
+function audioKick(){if(document.hidden)return;
+  if(AC&&AC.state==='closed'){AC=null;SFXOUT=null;BGM.reset();}
+  const a=audio();if(!a||a.state==='running'||acFixing===a)return;
+  acFixing=a;
+  setTimeout(()=>{if(acFixing===a)acFixing=null;if(AC!==a||a.state==='running'||document.hidden)return;
+    try{a.close();}catch(e){}AC=null;SFXOUT=null;BGM.reset();audio();if(DB.settings.music)music();},350);}
 function osc(type,f0,f1,t0,dur,vol,decay){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type;
   const s=a.currentTime+t0;o.frequency.setValueAtTime(f0,s);if(f1!==f0)o.frequency.linearRampToValueAtTime(f1,s+dur);
   g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(vol,s+0.004);g.gain.exponentialRampToValueAtTime(0.0008,s+Math.max(dur,decay||dur));
@@ -128,15 +137,23 @@ const BGM=(()=>{
     if(T.drums){while(true){const n=cur.drumIdx,at=cur.t0+n*E.e8;if(at>ahead)break;if(at>AC.currentTime-0.05)drum(at,n%8,Math.floor(n/8)%T.bars);cur.drumIdx++;}}}
   function stop(keepGain){if(timer){clearInterval(timer);timer=null;}if(!keepGain&&out&&AC){out.gain.cancelScheduledValues(AC.currentTime);out.gain.setTargetAtTime(0,AC.currentTime,0.08);}cur=keepGain?cur:null;}
   function duck(on){ducked=on;if(!out||!AC)return;out.gain.cancelScheduledValues(AC.currentTime);out.gain.setTargetAtTime(on?0:(cur?0.16:0),AC.currentTime,0.08);}
-  return {play,stop,duck,get started(){return startedOnce;}};
+  /* forget the old AudioContext's nodes (used when the context is rebuilt) */
+  function reset(){if(timer){clearInterval(timer);timer=null;}out=null;filt=null;waves={};cur=null;}
+  return {play,stop,duck,reset,get started(){return startedOnce;}};
 })();
 let SCREEN='main';
 function music(){BGM.play(SCREEN==='room'?'room':SCREEN==='route'?'route':'main');}
-document.addEventListener('visibilitychange',()=>{if(!AC)return;if(document.hidden){AC.suspend&&AC.suspend();}else{AC.resume&&AC.resume();}});
-document.addEventListener('pointerdown',()=>{audio();if(!BGM.started&&DB.settings.music)music();},{capture:true});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){abortListen();if(AC&&AC.suspend)AC.suspend().catch?.(()=>{});}
+  else if(AC&&AC.state!=='running'&&AC.state!=='closed'){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}});
+window.addEventListener('pagehide',()=>abortListen());
+const firstTouch=()=>{audioKick();if(!BGM.started&&DB.settings.music)music();};
+document.addEventListener('pointerdown',firstTouch,{capture:true});
+document.addEventListener('touchend',()=>audioKick(),{capture:true,passive:true});
 
 /* ---------- state ---------- */
-const S={mode:'idle',req:'',loc:null,area:'',queue:[],cards:[],pins:[],shownNames:[],groupId:null,fetching:false,routeFrom:null};
+const S={mode:'idle',req:'',loc:null,area:'',queue:[],cards:[],pins:[],shownNames:[],groupId:null,fetching:false,routeFrom:null,gen:0,emptyRefills:0};
+const CARD_SLOTS=9,QUEUE_MIN=6;
 const mainEl=$('#main'),charEl=$('#char'),dlgWrap=$('#dlgWrap'),dlg=$('#dlg');
 
 /* ---------- dialog ---------- */
@@ -158,15 +175,24 @@ new Image().src='miyeon_blush.png';
 
 /* ---------- speech ---------- */
 const SRec=window.SpeechRecognition||window.webkitSpeechRecognition;
-let rec=null,heard='',recDone=null;
-function listen(){if(!SRec)return false;heard='';
-  try{rec=new SRec();rec.lang='ko-KR';rec.interimResults=true;rec.continuous=true;
-    rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;heard=t.trim();say('듣고 있어요…<div class="hint" style="color:var(--yel)">'+esc(heard)+'</div>',{cursor:false});};
-    rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){rec=null;BGM.duck(false);typeInput('마이크를 쓸 수 없어서 글로 받을게요.');}};
-    rec.onend=()=>{if(recDone){const f=recDone;recDone=null;f();}};
-    BGM.duck(true);rec.start();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}catch(e){rec=null;BGM.duck(false);return false;}}
-function stopListen(){return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);res(heard);}};
-  recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
+let rec=null,heard='',recDone=null,recHold=false,recTries=0;
+/* after coming back from another app iOS often ends the first recognition session immediately
+   (mic still held by the old audio session) — while the finger is down, quietly start a fresh one */
+function startRec(){
+  const r=new SRec();rec=r;r.lang='ko-KR';r.interimResults=true;r.continuous=true;
+  r.onresult=e=>{if(rec!==r)return;let t='';for(const x of e.results)t+=x[0].transcript;heard=t.trim();say('듣고 있어요…<div class="hint" style="color:var(--yel)">'+esc(heard)+'</div>',{cursor:false});};
+  r.onerror=e=>{if(rec!==r)return;if(e.error==='not-allowed'||e.error==='service-not-allowed'){recHold=false;rec=null;BGM.duck(false);typeInput('마이크를 쓸 수 없어서 글로 받을게요.');}};
+  r.onend=()=>{r._ended=true;if(rec!==r)return;
+    if(recDone){const f=recDone;recDone=null;f();return;}
+    if(recHold&&!heard&&recTries<4){recTries++;setTimeout(()=>{if(recHold&&rec===r){try{startRec();}catch(e){}}},150);}};
+  r.start();}
+function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKick();
+  if(rec){try{rec.abort();}catch(e){}rec=null;}
+  try{BGM.duck(true);startRec();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}
+  catch(e){try{startRec();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;BGM.duck(false);return false;}}}
+function abortListen(){recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}}
+function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);res(heard);}};
+  if(rec._ended)return fin();recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
 function typeInput(msg){S.mode='typing';
   say(esc(msg||'하고 싶은 걸 적어주세요.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
   const i=$('#tin');setTimeout(()=>i.focus(),50);
@@ -233,7 +259,32 @@ ${profileText()}
 - mapsTitle은 Google 지도에 등록된 이름을 글자 그대로(현지어 그대로) 적어라. address는 Google 지도의 주소 그대로.
 출력은 설명 없이 JSON 배열만:
 [{"name":"한국어 표시 이름","mapsTitle":"Google 지도 등록 이름 그대로","address":"Google 지도 주소 그대로","line1":"한 줄 설명 18자 안팎","line2":"한 줄 설명 20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":["현금만","흡연 가능","예약 필요" 같은 주의사항, 최대 3개, 없으면 빈 배열],"area":"지역명 예: 서울 용산"}]`;}
-function setStage(t){const el=$('#loading');if(el&&!el.classList.contains('hidden'))el.querySelector('.stage').textContent=t;}
+/* loading readout: stage + elapsed, shown in green dot letters under the window only while a finger is on the screen */
+const LD={stage:'',t0:0,timer:null,held:false};
+function setStage(t){LD.stage=t;drawLdInfo();}
+window.setStage=setStage;
+function ldVisible(){const el=$('#loading');return el&&!el.classList.contains('hidden');}
+function drawLdInfo(){const cv=$('#ldInfo');if(!cv)return;
+  if(!LD.held||!ldVisible()){cv.classList.add('hidden');return;}
+  const secs=Math.floor((Date.now()-LD.t0)/1000),lines=[LD.stage||'준비 중',`경과 ${secs}초`];
+  const F=11,LH=14,PAD=2,SC=2,c=document.createElement('canvas'),x=c.getContext('2d');x.font=`700 ${F}px 'Apple SD Gothic Neo','Noto Sans KR',sans-serif`;
+  const w=Math.ceil(Math.max(...lines.map(l=>x.measureText(l).width)))+PAD*2,h=LH*lines.length+PAD*2;
+  c.width=w;c.height=h;x.font=`700 ${F}px 'Apple SD Gothic Neo','Noto Sans KR',sans-serif`;x.textBaseline='top';x.textAlign='center';x.fillStyle='#fff';
+  lines.forEach((l,i)=>x.fillText(l,w/2,PAD+i*LH+1));
+  const d=x.getImageData(0,0,w,h),p=d.data;for(let i=0;i<p.length;i+=4){const on=p[i+3]>110;p[i]=0x4d;p[i+1]=0xff;p[i+2]=0x7a;p[i+3]=on?255:0;}
+  cv.width=w;cv.height=h;cv.getContext('2d').putImageData(d,0,0);cv.style.width=w*SC+'px';cv.style.height=h*SC+'px';
+  const r=$('#loading').getBoundingClientRect(),host=$('#main').getBoundingClientRect();cv.style.top=(r.bottom-host.top+10)+'px';
+  cv.classList.remove('hidden');}
+function ldHold(on){LD.held=on;drawLdInfo();}
+document.addEventListener('touchstart',()=>ldHold(true),{capture:true,passive:true});
+document.addEventListener('touchend',e=>{if(!e.touches.length)ldHold(false);},{capture:true,passive:true});
+document.addEventListener('touchcancel',e=>{if(!e.touches.length)ldHold(false);},{capture:true,passive:true});
+document.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')ldHold(true);},{capture:true});
+document.addEventListener('pointerup',e=>{if(e.pointerType==='mouse')ldHold(false);},{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)ldHold(false);});
+function showLoading(){const ld=$('#loading');ld.innerHTML='찾는 중<span class="dots"></span>';ld.classList.remove('hidden');
+  LD.t0=Date.now();clearInterval(LD.timer);LD.timer=setInterval(()=>{if(!ldVisible()){clearInterval(LD.timer);LD.timer=null;drawLdInfo();return;}if(LD.held)drawLdInfo();},250);drawLdInfo();}
+function hideLoading(){$('#loading').classList.add('hidden');drawLdInfo();}
 async function post(url,body,ms){const ac=new AbortController();const to=setTimeout(()=>ac.abort(),ms);
   try{return await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ac.signal});}finally{clearTimeout(to);}}
 /* tools=false → plain call (no grounding, no Maps fee) */
@@ -313,7 +364,7 @@ async function geocodeMissing(){if(geoBusy)return;geoBusy=true;
   finally{geoBusy=false;}}
 function naturalPrompt(n){return `${S.loc?`현재 위치(${S.loc.lat.toFixed(5)},${S.loc.lng.toFixed(5)}) 근처에서`:''} "${S.req}" 요청에 맞는 실제 장소 ${n}곳을 Google 지도에서 찾아줘. 지금 시각은 ${new Date().toLocaleString('ko-KR',{timeStyle:'short',dateStyle:'medium'})}. 지금 이용 가능한 곳만. 각 장소의 Google 지도 등록 이름, 주소, 한 줄 특징을 목록으로 적어줘. 이미 본 곳 제외: ${S.shownNames.slice(-30).join(', ')||'없음'}`;}
 let DIAG='';
-async function fetchCards(nT,nR){
+async function fetchCards(nT,nR,bg){const setStage=bg?()=>{}:window.setStage;
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(700);return demoCards(nT,nR);}
   const want=nT+nR;let got=[];const used=new Set(S.shownNames);const usedPid=new Set();
   const add=c=>{if(!c||used.has(c.name)||(c.placeId&&usedPid.has(c.placeId)))return;used.add(c.name);if(c.placeId)usedPid.add(c.placeId);got.push(c);};
@@ -334,9 +385,10 @@ async function fetchCards(nT,nR){
 /* ---------- search flow ---------- */
 async function startSearch(txt){
   if(!DB.settings.key.trim()){openSettings('먼저 제미나이 API 키를 넣어주세요.');return;}
+  S.gen++;S.fetching=false;S.emptyRefills=0;
   S.mode='loading';S.req=txt;S.queue=[];S.cards=[];S.pins=[];S.shownNames=[];S.groupId=null;S.area='';
   showDlg(false);charEl.classList.add('gone');$('#mainShade').style.opacity=.45;
-  await sleep(700);const ld=$('#loading');ld.innerHTML='찾는 중<span class="dots"></span><div class="stage"></div><div class="secs"></div>';ld.classList.remove('hidden');const t0=Date.now();const tick=setInterval(()=>{if(ld.classList.contains('hidden'))return clearInterval(tick);ld.querySelector('.secs').textContent=Math.round((Date.now()-t0)/1000)+'초';},1000);
+  LD.stage='위치 확인 중';await sleep(700);showLoading();
   S.loc=await getLoc();
   try{const got=await fetchCards(10,5);if(!got.length)throw new Error('지금 갈 만한 곳을 확인하지 못했어요.');
     S.area=got.find(c=>c.area)?.area||'';
@@ -344,16 +396,29 @@ async function startSearch(txt){
     const first=[];const pattern=['t','t','r','t','t','r','t','r','t'];
     for(const p of pattern){const src=p==='r'?(r.length?r:t):(t.length?t:r);if(src.length)first.push(src.shift());}
     S.queue=[...t,...r];S.cards=first;first.concat(S.queue).forEach(c=>S.shownNames.push(c.name));
-    $('#loading').classList.add('hidden');showCards();geocodeMissing();
+    hideLoading();showCards();geocodeMissing();refill();  // prefetch the next batch right away
     if(!S.loc)toast('현재 위치를 못 받아서 거리 표시가 빠져요');
-  }catch(e){$('#loading').classList.add('hidden');backToIdle();say((/<div/.test(e.message)?e.message:esc(e.message||'문제가 생겼어요.'))+'<br>꾹 눌러서 다시 말해주세요.');}
+  }catch(e){hideLoading();backToIdle();say((/<div/.test(e.message)?e.message:esc(e.message||'문제가 생겼어요.'))+'<br>꾹 눌러서 다시 말해주세요.');}
 }
-function backToIdle(){S.mode='idle';S.cards=[];S.pins=[];$('#cardLayer').classList.add('hidden');$('#dimmer').classList.remove('on');
+function backToIdle(){S.gen++;S.queue=[];S.mode='idle';S.cards=[];S.pins=[];$('#cardLayer').classList.add('hidden');$('#dimmer').classList.remove('on');
   $('#mainShade').style.opacity=.30;charEl.classList.remove('gone','front');showDlg(true);sayIdle();}
-async function refill(){if(S.fetching||S.queue.length>=4)return;S.fetching=true;
-  try{const got=await fetchCards(4,2);got.forEach(c=>S.shownNames.push(c.name));S.queue.push(...got);geocodeMissing();}catch(e){}S.fetching=false;}
+/* keep a queue behind the 9 visible cards; whatever arrives goes straight into empty slots */
+async function refill(){if(S.fetching||!S.req||S.queue.length>=QUEUE_MIN||S.emptyRefills>=3)return;
+  const gen=S.gen;S.fetching=true;let got=[];
+  try{got=await fetchCards(4,2,true);}catch(e){}
+  if(gen!==S.gen)return;            // a new search started (or cards were cleared) meanwhile — drop it
+  S.fetching=false;
+  if(got.length){S.emptyRefills=0;got.forEach(c=>S.shownNames.push(c.name));S.queue.push(...got);geocodeMissing();}else S.emptyRefills++;
+  fillSlots();
+  if(S.cards.length<CARD_SLOTS&&S.mode!=='idle')setTimeout(refill,got.length?300:2500);  // only keep going on our own while slots are visibly empty
+}
 function takeFromQueue(){if(!S.queue.length)return null;const wantR=Math.random()<0.3;let i=S.queue.findIndex(c=>(c.kind==='random')===wantR);if(i<0)i=0;
-  const c=S.queue.splice(i,1)[0];if(S.queue.length<4)refill();return c;}
+  const c=S.queue.splice(i,1)[0];if(S.queue.length<QUEUE_MIN)refill();return c;}
+/* put queued cards into empty slots without redrawing the cards already on screen */
+function fillSlots(){const add=[];while(S.cards.length<CARD_SLOTS){const n=takeFromQueue();if(!n)break;S.cards.push(n);add.push(n);}
+  if(!add.length)return;if(S.mode==='idle'||S.mode==='loading')return;
+  const L=$('#cardList');if(!L)return;L.insertAdjacentHTML('beforeend',add.map(c=>cardHTML(c)).join(''));
+  add.forEach(c=>{const w=L.querySelector(`.cw[data-id="${c.id}"]`);if(w){bindCard(w);w.classList.add('arrive');}});updatePins();}
 
 /* ---------- profile stats ---------- */
 function stat(c,k,w=1){const s=DB.profile.stats;s[c.category]=s[c.category]||{};s[c.category][k]=(s[c.category][k]||0)+w;save();}
@@ -389,9 +454,10 @@ function cardHTML(c,extra=''){return `<div class="cw" data-id="${c.id}"><div cla
   ${c.line1?`<div class="l">${esc(c.line1)}</div>`:''}${c.line2?`<div class="l">${esc(c.line2)}</div>`:''}<span class="dist"></span>${extra}</div></div>`;}
 function showCards(){S.mode='cards';$('#cardLayer').classList.remove('hidden');$('#reqTitle').textContent=S.area?`${S.area} · ${S.req}`:S.req;renderCards();}
 function renderCards(){const L=$('#cardList');const st=L.scrollTop;L.innerHTML=S.cards.map(c=>cardHTML(c)).join('');
-  L.querySelectorAll('.cw').forEach(w=>{const id=w.dataset.id,c=S.cards.find(x=>x.id===id),card=w.querySelector('.card');
-    gestures(w,card,{onTap:()=>togglePin(c,card),onLong:()=>openDetail(c),onRight:()=>removeCard(c,'save'),onLeft:()=>removeCard(c,'pass')});});
+  L.querySelectorAll('.cw').forEach(bindCard);
   L.scrollTop=st;updatePins();}
+function bindCard(w){const id=w.dataset.id,c=S.cards.find(x=>x.id===id),card=w.querySelector('.card');if(!c||!card)return;
+  gestures(w,card,{onTap:()=>togglePin(c,card),onLong:()=>openDetail(c),onRight:()=>removeCard(c,'save'),onLeft:()=>removeCard(c,'pass')});}
 function updatePins(){const pc=pinnedCards(S.cards,S.pins);$('#pinCount').textContent=`핀 ${S.pins.length}/3`;
   const L=$('#cardList');L.classList.toggle('showdist',pc.length>0);
   L.querySelectorAll('.card').forEach(el=>{const c=S.cards.find(x=>x.id===el.dataset.id);if(!c)return;const pinned=S.pins.includes(c.id);
@@ -409,7 +475,7 @@ function removeCard(c,how){S.cards=S.cards.filter(x=>x.id!==c.id);S.pins=S.pins.
   if(how==='save'){const g=ensureGroup();g.cards.push(c);stat(c,'save');}
   else{DB.passed.unshift({card:c,groupId:S.groupId,request:S.req,area:S.area,date:Date.now(),at:Date.now()});stat(c,'skip',c.kind==='random'?0.3:1);}
   save();const n=takeFromQueue();if(n)S.cards.push(n);renderCards();
-  if(!S.cards.length){refill();}}
+  if(S.queue.length<QUEUE_MIN||S.cards.length<CARD_SLOTS){S.emptyRefills=0;refill();}}
 /* pull at list edges: top → onTop, bottom → onBottom */
 function edgePull(listEl,onTop,onBottom){let y0=null,edge=null;
   listEl.addEventListener('touchstart',e=>{const atTop=listEl.scrollTop<=0,atBot=listEl.scrollTop+listEl.clientHeight>=listEl.scrollHeight-2;

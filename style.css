@@ -212,11 +212,15 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .picker .pbtm .gold{color:var(--bdark)}
 .picker .leaflet-control-attribution{font-size:9px}
 /* v2.0.5 */
-#loading{text-align:center;min-width:170px}
-#loading .stage{font-size:12px;font-weight:400;color:var(--muted);margin-top:6px}
-#loading .secs{font-size:11px;font-weight:400;color:var(--muted);opacity:.7;margin-top:2px}
+/* loading readout (only while a finger is down) */
+#ldInfo{position:absolute;left:50%;transform:translateX(-50%);z-index:8;pointer-events:none;image-rendering:pixelated;image-rendering:crisp-edges;filter:drop-shadow(0 0 3px rgba(77,255,122,.55))}
+#ldInfo.hidden{display:none}
 .picker .ptop{padding:0;background:none;border:0}
 .picker .pmsg{padding:10px 12px;font-size:13px;color:#fff}
 .picker .psearch{display:flex;gap:8px;margin-top:8px}
 .picker .psearch input{flex:1;height:40px;padding:0 10px;font-size:15px;border:2px solid #5a648c;background:rgba(10,13,28,.95);color:#fff;border-radius:0;outline:none}
 .picker .psearch button{width:64px;height:40px;font-weight:700;color:var(--bdark)}
+
+/* card that arrived from the background queue */
+.cw.arrive .card{animation:arrive .35s steps(4)}
+@keyframes arrive{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
