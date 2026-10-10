@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.5';
+const VERSION='2.0.6';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -14,6 +14,7 @@ function load(){try{DB=JSON.parse(localStorage.getItem(LS))||{}}catch(e){DB={}}
   if(!DB.settings.model)DB.settings.model=DEFAULT_MODEL;
   DB.profile=Object.assign({},DEF.profile,DB.profile);
   if(!Array.isArray(DB.routes))DB.routes=[];
+  ['lastLoc','manualLoc'].forEach(k=>{if(DB[k])DB[k].label='';});
   const now=Date.now();DB.passed=DB.passed.filter(p=>now-p.at<10*864e5);}
 function save(){try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
 load();
@@ -570,9 +571,11 @@ function toRoom(){if(S.mode!=='idle')return;S.mode='room';roomTab='saved';roomPi
 function toMain(){stepFade($('#room'),1,()=>{$('#room').classList.add('hidden');mainEl.classList.remove('hidden');SCREEN='main';music();S.mode='idle';sayIdle();});}
 
 /* ---------- settings ---------- */
-async function placeLabel(l){if(!l||DB.settings.key.trim().toLowerCase()==='demo'||!DB.settings.key.trim())return '';
-  try{const r=await gemini('Google 지도 도구로 이 좌표가 어느 동네인지 확인해서 "시·구·동" 수준 한 줄로만 답해. 다른 말 하지 마.',l);
-    return (r.text||'').split('\n')[0].trim().slice(0,40);}catch(e){return '';}}
+async function placeLabel(l){if(!l)return '';
+  try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=ko&lat=${l.lat}&lon=${l.lng}`);const j=await r.json();const a=j.address||{};
+    const parts=[a.state||a.province||a.region,a.city||a.town||a.county,a.city_district||a.borough||a.district,a.suburb||a.quarter||a.neighbourhood||a.village];
+    const out=[];parts.forEach(x=>{if(x&&!out.includes(x))out.push(x);});
+    return out.join(' ')||(j.display_name||'').split(',').slice(0,3).reverse().join(' ').trim();}catch(e){return '';}}
 function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=document.createElement('div');ov.className='overlay';ov.style.alignItems='flex-start';ov.style.overflowY='auto';
   const L={...st.links};let music=st.music!==false;
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px;margin:calc(var(--sat) + 30px) 0 30px"><div class="tagname">설정</div><div class="win px solid">
