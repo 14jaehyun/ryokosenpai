@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.17';
+const VERSION='2.0.18';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';

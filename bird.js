@@ -37,7 +37,7 @@
   async function stay(o){
     const w=W(),h=H();
     // road surface in bg.jpg: lower-left part of the street, clear of 미연 (right, now 120%) and the dialog (bottom)
-    let x=w*(0.23+Math.random()*0.06),y=h*(o.high?0.50+Math.random()*0.03:0.60+Math.random()*0.05);  // high: above the big chat box
+    let x=w*(0.22+Math.random()*0.04),y=h*(o.high?0.50+Math.random()*0.03:0.60+Math.random()*0.05);  // high: above the big chat box
     const fromRight=Math.random()<0.5;const flipIn=!fromRight;   // sprite faces left; flip when coming from the left
     cv.style.display='block';
     await fly(fromRight?w+30:-30,h*0.22,x,y,1500,flipIn,true);
@@ -47,7 +47,7 @@
       if(Math.random()<0.35){draw('peck',flip);await sleep(220);draw('stand',flip);await sleep(180);draw('peck',flip);await sleep(220);draw('stand',flip);await sleep(300);}
       if(i===2&&Math.random()<0.6){dir=-dir;flip=!flip;draw('stand',flip);await sleep(350);}  // look the other way
       // stay on the road strip between the utility pole (left) and 미연's hair (right)
-      if(x+dir*DOT*2<w*0.21||x+dir*DOT*2+5*DOT>w*0.43){dir=-dir;flip=!flip;draw('stand',flip);await sleep(300);}
+      if(x+dir*DOT*2<w*0.21||x+dir*DOT*2+5*DOT>w*0.37){dir=-dir;flip=!flip;draw('stand',flip);await sleep(300);}
       x=await hop(x,y,dir*DOT*2,flip);await sleep(260+Math.random()*300);}
     draw('stand',flip);await sleep(600);
     const away=Math.random()<0.5?-1:1;

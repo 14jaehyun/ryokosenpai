@@ -33,7 +33,7 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 
 /* main */
 #touch{position:absolute;inset:0;z-index:1;touch-action:none}
-#char{position:absolute;right:2.4%;bottom:21.66%;width:53.3%;z-index:3;pointer-events:none;transition:opacity .7s linear}  /* fixed — from the layout pptx; her waist hides behind the dialog box */
+#char{position:absolute;right:2.4%;bottom:15.98%;width:58.63%;z-index:3;pointer-events:none;transition:opacity .7s linear}  /* fixed — from the layout pptx; her waist hides behind the dialog box */
 #char img{width:100%;display:block;filter:drop-shadow(7px 6px 2px rgba(8,10,20,.5));image-rendering:auto}
 #char.pressed img{transform:translate(7px,6px);filter:none}
 #char.gone{opacity:0}
