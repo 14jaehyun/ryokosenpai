@@ -213,7 +213,7 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .picker .leaflet-control-attribution{font-size:9px}
 /* v2.0.5 */
 /* loading readout (only while a finger is down) */
-#ldInfo{position:absolute;left:50%;transform:translateX(-50%);z-index:8;pointer-events:none;image-rendering:pixelated;image-rendering:crisp-edges;filter:drop-shadow(0 0 3px rgba(77,255,122,.55))}
+#ldInfo{position:absolute;left:50%;transform:translateX(-50%);z-index:8;pointer-events:none;image-rendering:pixelated;image-rendering:crisp-edges}
 #ldInfo.hidden{display:none}
 .picker .ptop{padding:0;background:none;border:0}
 .picker .pmsg{padding:10px 12px;font-size:13px;color:#fff}

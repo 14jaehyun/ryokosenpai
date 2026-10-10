@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.9';
+const VERSION='2.0.10';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -32,7 +32,12 @@ const transitTxt=m=>m<1200?'걸어가는 게 빨라요':'약 '+Math.round(8+m/10
 const inKorea=p=>!!p&&p.lat>33&&p.lat<38.9&&p.lng>124.5&&p.lng<131.9;
 const PIN_SVG='<svg class="pin" viewBox="0 0 6 8" shape-rendering="crispEdges"><rect x="1" y="0" width="4" height="3" fill="#ffd66e"/><rect x="0" y="3" width="6" height="1" fill="#ffd66e"/><rect x="2" y="4" width="2" height="4" fill="#ffd66e"/></svg>';
 function toast(msg,ms=2200){const t=document.createElement('div');t.className='toast px solid';t.textContent=msg;$('#app').appendChild(t);setTimeout(()=>t.remove(),ms);}
-const searchText=c=>[c.address,c.mapsTitle||c.name].filter(Boolean).join(' ').trim();
+/* Korean Maps titles often come as "가게 | 용산 맛집 | English name ..." — keep only the real name */
+const placeTitle=c=>{const t=String(c.mapsTitle||'').split(/\s*[|｜]\s*/).map(x=>x.trim()).find(Boolean);return t||String(c.name||'').trim();};
+const isKR=c=>c.lat!=null?inKorea(c):/(특별시|광역시|[가-힣]+[도시군구]\s|대한민국)/.test(c.address||'');
+/* Korea: name + 구/동 (Google Maps in Korea doesn't find "full address + name"). Elsewhere: unchanged (works well in Japan) */
+const regionKR=a=>{const m=String(a||'').match(/([가-힣]+(?:구|군))(?=\s)/)||String(a||'').match(/([가-힣]+시)(?=\s)/);return m?m[1]:'';};
+const searchText=c=>isKR(c)?[placeTitle(c),regionKR(c.address)].filter(Boolean).join(' ').trim():[c.address,placeTitle(c)].filter(Boolean).join(' ').trim();
 
 /* open another app without leaving a blank browser page behind */
 function openExternal(appUrl,webUrl){
@@ -45,18 +50,25 @@ function openExternal(appUrl,webUrl){
 function openGoogle(url){openExternal('comgooglemapsurl://'+url.replace(/^https?:\/\//,''),url);}
 /* ---------- sound effects (Web Audio, ambient: follows silent switch, no now-playing) ---------- */
 let AC=null,SFXOUT=null;
-function audio(){try{if(!AC){if(navigator.audioSession)navigator.audioSession.type='ambient';AC=new(window.AudioContext||window.webkitAudioContext)();
+/* re-assert the 'ambient' audio session. After the mic or another app has used audio, iOS can leave the page in a
+   record session that plays through the quiet earpiece route — flipping the type forces WebKit to re-apply it. */
+function ambientSession(){const s=navigator.audioSession;if(!s)return;try{if(s.type==='ambient')s.type='auto';s.type='ambient';}catch(e){}}
+function audio(){try{if(!AC){ambientSession();AC=new(window.AudioContext||window.webkitAudioContext)();
     SFXOUT=AC.createGain();SFXOUT.gain.value=1;SFXOUT.connect(AC.destination);}
   if(AC.state!=='running'&&AC.state!=='closed'&&!document.hidden){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}}catch(e){}return AC;}
 /* iOS leaves the context 'interrupted' (not 'suspended') after leaving the app.
    On any touch: if it isn't running, resume; if that doesn't take within 350ms, throw it away and build a new one. */
-let acFixing=null;
+let acFixing=null,acStale=false;
+function rebuildAudio(){const old=AC;AC=null;SFXOUT=null;BGM.reset();try{old&&old.close();}catch(e){}audio();if(DB.settings.music)music();}
 function audioKick(){if(document.hidden)return;
   if(AC&&AC.state==='closed'){AC=null;SFXOUT=null;BGM.reset();}
+  /* first touch after coming back from another app: build a fresh context inside this touch (it starts running
+     and on the normal speaker route), instead of reviving the old one */
+  if(acStale){acStale=false;if(AC){acFixing=null;rebuildAudio();return;}}
   const a=audio();if(!a||a.state==='running'||acFixing===a)return;
   acFixing=a;
   setTimeout(()=>{if(acFixing===a)acFixing=null;if(AC!==a||a.state==='running'||document.hidden)return;
-    try{a.close();}catch(e){}AC=null;SFXOUT=null;BGM.reset();audio();if(DB.settings.music)music();},350);}
+    rebuildAudio();},350);}
 function osc(type,f0,f1,t0,dur,vol,decay){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type;
   const s=a.currentTime+t0;o.frequency.setValueAtTime(f0,s);if(f1!==f0)o.frequency.linearRampToValueAtTime(f1,s+dur);
   g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(vol,s+0.004);g.gain.exponentialRampToValueAtTime(0.0008,s+Math.max(dur,decay||dur));
@@ -144,7 +156,7 @@ const BGM=(()=>{
 let SCREEN='main';
 function music(){BGM.play(SCREEN==='room'?'room':SCREEN==='route'?'route':'main');}
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){abortListen();if(AC&&AC.suspend)AC.suspend().catch?.(()=>{});}
+  if(document.hidden){abortListen();acStale=true;if(AC&&AC.suspend)AC.suspend().catch?.(()=>{});}
   else if(AC&&AC.state!=='running'&&AC.state!=='closed'){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}});
 window.addEventListener('pagehide',()=>abortListen());
 const firstTouch=()=>{audioKick();if(!BGM.started&&DB.settings.music)music();};
@@ -190,8 +202,8 @@ function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKi
   if(rec){try{rec.abort();}catch(e){}rec=null;}
   try{BGM.duck(true);startRec();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}
   catch(e){try{startRec();say('듣고 있어요…<div class="hint">손을 떼면 끝나요.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;BGM.duck(false);return false;}}}
-function abortListen(){recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}}
-function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);res(heard);}};
+function abortListen(){recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();}
+function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);ambientSession();res(heard);}};
   if(rec._ended)return fin();recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
 function typeInput(msg){S.mode='typing';
   say(esc(msg||'하고 싶은 걸 적어주세요.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
@@ -271,7 +283,7 @@ function drawLdInfo(){const cv=$('#ldInfo');if(!cv)return;
   const w=Math.ceil(Math.max(...lines.map(l=>x.measureText(l).width)))+PAD*2,h=LH*lines.length+PAD*2;
   c.width=w;c.height=h;x.font=`700 ${F}px 'Apple SD Gothic Neo','Noto Sans KR',sans-serif`;x.textBaseline='top';x.textAlign='center';x.fillStyle='#fff';
   lines.forEach((l,i)=>x.fillText(l,w/2,PAD+i*LH+1));
-  const d=x.getImageData(0,0,w,h),p=d.data;for(let i=0;i<p.length;i+=4){const on=p[i+3]>110;p[i]=0x4d;p[i+1]=0xff;p[i+2]=0x7a;p[i+3]=on?255:0;}
+  const d=x.getImageData(0,0,w,h),p=d.data;for(let i=0;i<p.length;i+=4){const on=p[i+3]>110;p[i]=0x3a;p[i+1]=0xb8;p[i+2]=0x5c;p[i+3]=on?255:0;}
   cv.width=w;cv.height=h;cv.getContext('2d').putImageData(d,0,0);cv.style.width=w*SC+'px';cv.style.height=h*SC+'px';
   const r=$('#loading').getBoundingClientRect(),host=$('#main').getBoundingClientRect();cv.style.top=(r.bottom-host.top+10)+'px';
   cv.classList.remove('hidden');}
@@ -498,7 +510,7 @@ $('#routeBtn').onclick=()=>{if(!S.pins.length)return;SFX.btn();const pc=pinnedCa
 
 /* ---------- external links ---------- */
 function gSearch(c){const q=encodeURIComponent(searchText(c));return `https://www.google.com/maps/search/?api=1&query=${q}${c.placeId?`&query_place_id=${encodeURIComponent(c.placeId)}`:''}`;}
-function kSearch(c){const q=encodeURIComponent(searchText(c)||c.name);return {app:`kakaomap://search?q=${q}`,web:`https://map.kakao.com/link/search/${q}`};}
+function kSearch(c){const q=encodeURIComponent([regionKR(c.address),placeTitle(c)].filter(Boolean).join(' ')||c.name);return {app:`kakaomap://search?q=${q}`,web:`https://map.kakao.com/link/search/${q}`};}
 function ySearch(c){const q=encodeURIComponent((c.mapsTitle||c.name)+' '+(c.area||''));return {app:`youtube://www.youtube.com/results?search_query=${q}`,web:`https://www.youtube.com/results?search_query=${q}`};}
 function kakaoOK(items){const p=S.loc||items.find(c=>c.lat!=null);return DB.settings.links.kakao&&(p?inKorea(p):true);}
 
