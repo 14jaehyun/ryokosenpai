@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.6';
+const VERSION='2.0.8';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -282,22 +282,35 @@ function mkCard(c,ch){const pid=String(ch.placeId||'').replace(/^places\//,'');
     line1:String(c.line1||''),line2:String(c.line2||''),kind:c.kind==='random'?'random':'taste',category:String(c.category||'기타'),
     lat:isFinite(+c.lat)&&+c.lat!==0&&c.lat!==null?+c.lat:null,lng:isFinite(+c.lng)&&+c.lng!==0&&c.lng!==null?+c.lng:null,hours:String(c.hours||''),open:c.open!==false,
     tags:Array.isArray(c.tags)?c.tags.slice(0,3).map(String):[],area:String(c.area||'')};}
-/* describe verified Maps places (no tools → cheap) */
+/* describe verified Maps places: look each one up on Google Maps (grounded), fall back to plain call */
 async function describeChunks(chs,ctxText,nR){
   const list=chs.map((c,i)=>`${i}. ${c.title}`).join('\n');
-  const p=`아래는 Google 지도에서 실제로 확인된 장소 목록과 참고 메모야. 이 목록에 있는 장소만, 번호 순서대로 카드 정보를 만들어.
+  const p=`아래 장소들은 Google 지도에서 확인된 실제 장소야. Google 지도 도구로 각 장소를 하나씩 찾아보고, 번호 순서대로 카드 정보를 채워.
 [사용자 요청] "${S.req}"
+[현재 위치] ${S.loc?S.loc.lat.toFixed(5)+','+S.loc.lng.toFixed(5):'모름'}
 [취향]
 ${profileText()}
 [장소 목록]
 ${list}
 [참고 메모]
-${String(ctxText||'').slice(0,3000)}
-규칙: 번호마다 정확히 하나. 모르는 값은 지어내지 말고 빈 문자열이나 null. 취향과 반대 결인 곳 ${nR}개 정도는 kind "random".
+${String(ctxText||'').slice(0,2500)}
+규칙: 번호마다 정확히 하나. 주소·좌표·영업시간은 Google 지도에 나온 그대로. 설명 두 줄은 이 장소가 어떤 곳인지 구체적으로(빈칸 금지). 취향과 반대 결인 곳 ${nR}개 정도는 kind "random".
 출력은 JSON 배열만:
-[{"i":0,"name":"한국어 표시 이름","address":"주소(메모에 있으면)","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":null,"lng":null,"hours":"","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
-  const r=await gemini(p,null,{tools:false,timeout:30000});const arr=jsonArr(r.text)||[];
+[{"i":0,"name":"한국어 표시 이름","address":"Google 지도 주소","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
+  let arr=null;
+  try{const r=await gemini(p,S.loc,{timeout:40000});arr=jsonArr(r.text);}catch(e){if(/한도|결제|API 키/.test(e.message))throw e;}
+  if(!arr){const r=await gemini(p,null,{tools:false,timeout:30000});arr=jsonArr(r.text)||[];}
   return chs.map((ch,i)=>mkCard(arr.find(x=>+x.i===i)||arr[i]||{name:ch.title},ch));}
+/* fill missing coordinates in the background (OpenStreetMap, free) */
+let geoBusy=false;
+async function geocodeMissing(){if(geoBusy)return;geoBusy=true;
+  try{for(const c of [...S.cards,...S.queue]){if(c.lat!=null&&c.lng!=null)continue;
+    const qs=[c.address,[c.mapsTitle,c.area].filter(Boolean).join(' ')].filter(x=>x&&x.trim().length>3);
+    for(const q of qs){try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(q)}`);const j=await r.json();
+        await sleep(1100);
+        if(j&&j[0]){const p={lat:+j[0].lat,lng:+j[0].lon};if(!S.loc||distM(S.loc,p)<60000){c.lat=p.lat;c.lng=p.lng;c.approx=true;break;}}}catch(e){await sleep(1100);}}
+    if(S.mode==='cards')updatePins();}}
+  finally{geoBusy=false;}}
 function naturalPrompt(n){return `${S.loc?`현재 위치(${S.loc.lat.toFixed(5)},${S.loc.lng.toFixed(5)}) 근처에서`:''} "${S.req}" 요청에 맞는 실제 장소 ${n}곳을 Google 지도에서 찾아줘. 지금 시각은 ${new Date().toLocaleString('ko-KR',{timeStyle:'short',dateStyle:'medium'})}. 지금 이용 가능한 곳만. 각 장소의 Google 지도 등록 이름, 주소, 한 줄 특징을 목록으로 적어줘. 이미 본 곳 제외: ${S.shownNames.slice(-30).join(', ')||'없음'}`;}
 let DIAG='';
 async function fetchCards(nT,nR){
@@ -314,6 +327,7 @@ async function fetchCards(nT,nR){
     const r2=await gemini(naturalPrompt(want),S.loc);DIAG+=` / 재시도 확인 ${r2.chunks.length}곳`;
     const fresh=r2.chunks.filter(ch=>!usedPid.has(String(ch.placeId||'').replace(/^places\//,'')));
     if(fresh.length){setStage('확인된 곳 정리 중');try{(await describeChunks(fresh.slice(0,want),r2.text,nR)).forEach(add);}catch(e){}}}
+  const full=got.filter(c=>c.line1||c.line2);if(full.length>=5)got=full;
   if(!got.length&&!S.cards.length)throw new Error(`구글맵에서 확인된 곳을 못 찾았어요. 지역을 넣어서 다시 말해주세요.<div class="hint">${esc(DIAG)}</div>`);
   return got;}
 
@@ -330,14 +344,14 @@ async function startSearch(txt){
     const first=[];const pattern=['t','t','r','t','t','r','t','r','t'];
     for(const p of pattern){const src=p==='r'?(r.length?r:t):(t.length?t:r);if(src.length)first.push(src.shift());}
     S.queue=[...t,...r];S.cards=first;first.concat(S.queue).forEach(c=>S.shownNames.push(c.name));
-    $('#loading').classList.add('hidden');showCards();
+    $('#loading').classList.add('hidden');showCards();geocodeMissing();
     if(!S.loc)toast('현재 위치를 못 받아서 거리 표시가 빠져요');
   }catch(e){$('#loading').classList.add('hidden');backToIdle();say((/<div/.test(e.message)?e.message:esc(e.message||'문제가 생겼어요.'))+'<br>꾹 눌러서 다시 말해주세요.');}
 }
 function backToIdle(){S.mode='idle';S.cards=[];S.pins=[];$('#cardLayer').classList.add('hidden');$('#dimmer').classList.remove('on');
   $('#mainShade').style.opacity=.30;charEl.classList.remove('gone','front');showDlg(true);sayIdle();}
 async function refill(){if(S.fetching||S.queue.length>=4)return;S.fetching=true;
-  try{const got=await fetchCards(4,2);got.forEach(c=>S.shownNames.push(c.name));S.queue.push(...got);}catch(e){}S.fetching=false;}
+  try{const got=await fetchCards(4,2);got.forEach(c=>S.shownNames.push(c.name));S.queue.push(...got);geocodeMissing();}catch(e){}S.fetching=false;}
 function takeFromQueue(){if(!S.queue.length)return null;const wantR=Math.random()<0.3;let i=S.queue.findIndex(c=>(c.kind==='random')===wantR);if(i<0)i=0;
   const c=S.queue.splice(i,1)[0];if(S.queue.length<4)refill();return c;}
 
@@ -404,14 +418,17 @@ function edgePull(listEl,onTop,onBottom){let y0=null,edge=null;
     if(dy>90&&onTop&&(edge==='top'||edge==='both')){y0=null;onTop();}
     else if(dy<-90&&onBottom&&(edge==='bot'||edge==='both')){y0=null;onBottom();}},{passive:true});
   listEl.addEventListener('touchend',()=>{y0=null;},{passive:true});}
-edgePull($('#cardList'),()=>{if(S.mode==='cards'){SFX.btn();backToIdle();}});
+function cardsResume(){S.mode='cards';charEl.classList.add('gone');setTimeout(()=>charEl.classList.remove('front'),700);$('#dimmer').classList.remove('on');setTimeout(()=>showDlg(false),10);}
+edgePull($('#cardList'),()=>{if(S.mode!=='cards')return;SFX.btn();S.mode='clearConfirm';
+  $('#dimmer').classList.add('on');charEl.classList.add('front');charEl.classList.remove('gone');showDlg(true);
+  say('추천 카드를 지울까요?<div class="hint">오른쪽으로 밀어 저장한 카드만 보관함에 남아요.</div>',{choices:[{label:'네',fn:()=>backToIdle()},{label:'아니요',fn:cardsResume}]});});
 
 /* route confirm (main, with Miyeon) */
 $('#routeBtn').onclick=()=>{if(!S.pins.length)return;SFX.btn();const pc=pinnedCards(S.cards,S.pins);S.mode='routeConfirm';
   $('#dimmer').classList.add('on');charEl.classList.add('front');charEl.classList.remove('gone');showDlg(true);
   say(`<span class="q">${pc.map(c=>esc(c.name)).join(', ')}</span><br>이 순서로 동선 짜볼까요?`,{choices:[
     {label:'네',fn:()=>openRoute(pc,'cards',S.req)},
-    {label:'아니요',fn:()=>{S.mode='cards';charEl.classList.add('gone');setTimeout(()=>charEl.classList.remove('front'),700);$('#dimmer').classList.remove('on');setTimeout(()=>showDlg(false),10);}}]});};
+    {label:'아니요',fn:cardsResume}]});};
 
 /* ---------- external links ---------- */
 function gSearch(c){const q=encodeURIComponent(searchText(c));return `https://www.google.com/maps/search/?api=1&query=${q}${c.placeId?`&query_place_id=${encodeURIComponent(c.placeId)}`:''}`;}
