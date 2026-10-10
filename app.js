@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.20';
+const VERSION='2.0.22';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -49,6 +49,7 @@ const searchText=c=>isKR(c)?[placeTitle(c),regionKR(c.address)].filter(Boolean).
 
 /* open another app without leaving a blank browser page behind */
 function openExternal(appUrl,webUrl){
+  goSilent();setTimeout(()=>{if(!document.hidden)AWAY=false;},2500);  // no sound may be playing at the moment we hand over to Maps/YouTube (that's what locks the quiet volume)
   if(!appUrl){window.open(webUrl,'_blank','noopener');return;}
   let left=false;const onHide=()=>{if(document.hidden)left=true;};
   document.addEventListener('visibilitychange',onHide);
@@ -66,7 +67,7 @@ let AC=null,SFXOUT=null;
 function ambientSession(){const s=navigator.audioSession;if(!s)return;const want=SOUNDTEST==='A'?'playback':DB.settings.music?'transient-solo':'ambient';
   try{if(s.type===want)s.type='auto';s.type=want;}catch(e){}}
 /* where all sound goes: the speaker directly, or (experiment B) through an <audio> element */
-let SOUNDTEST='',ROUTE_DEST=null,ROUTE_EL=null;
+let SOUNDTEST='',ROUTE_DEST=null,ROUTE_EL=null;  // no 'playback' (A): it puts a now-playing badge on the Dynamic Island. The fix is MICOPEN: no sound at all while the mic is open
 function acOut(){return ROUTE_DEST||AC.destination;}
 function audio(){try{if(!AC){ambientSession();AC=new(window.AudioContext||window.webkitAudioContext)();
     ROUTE_DEST=null;
@@ -79,7 +80,7 @@ function audio(){try{if(!AC){ambientSession();AC=new(window.AudioContext||window
    On any touch: if it isn't running, resume; if that doesn't take within 350ms, throw it away and build a new one. */
 let acFixing=null,acStale=false;
 function rebuildAudio(){const old=AC;AC=null;SFXOUT=null;BGM.reset();try{old&&old.close();}catch(e){}ambientSession();audio();if(DB.settings.music)music();}
-function audioKick(){if(document.hidden)return;
+function audioKick(){if(document.hidden)return;AWAY=false;
   if(AC&&AC.state==='closed'){AC=null;SFXOUT=null;BGM.reset();}
   /* first touch after coming back from another app: build a fresh context inside this touch (it starts running
      and on the normal speaker route), instead of reviving the old one */
@@ -88,11 +89,14 @@ function audioKick(){if(document.hidden)return;
   acFixing=a;
   setTimeout(()=>{if(acFixing===a)acFixing=null;if(AC!==a||a.state==='running'||document.hidden)return;
     rebuildAudio();},350);}
-function osc(type,f0,f1,t0,dur,vol,decay){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type;
+let MICOPEN=false,AWAY=false;
+/* hard silence: stop music, cut every sound, until we're back and the next touch rebuilds the audio */
+function goSilent(){AWAY=true;acStale=true;try{BGM.stop();}catch(e){}try{if(SFXOUT&&AC)SFXOUT.gain.setValueAtTime(0,AC.currentTime);if(AC&&AC.suspend)AC.suspend().catch(()=>{});}catch(e){}}
+function osc(type,f0,f1,t0,dur,vol,decay){if(MICOPEN||AWAY)return;const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type;
   const s=a.currentTime+t0;o.frequency.setValueAtTime(f0,s);if(f1!==f0)o.frequency.linearRampToValueAtTime(f1,s+dur);
   g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(vol,s+0.004);g.gain.exponentialRampToValueAtTime(0.0008,s+Math.max(dur,decay||dur));
   o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+Math.max(dur,decay||dur)+0.02);}
-function noise(t0,dur,vol,type,f0,f1,q,atk){const a=audio();if(!a)return;const n=Math.floor(a.sampleRate*dur),b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);
+function noise(t0,dur,vol,type,f0,f1,q,atk){if(MICOPEN||AWAY)return;const a=audio();if(!a)return;const n=Math.floor(a.sampleRate*dur),b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);
   for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
   const s=a.createBufferSource();s.buffer=b;const g=a.createGain(),flt=a.createBiquadFilter();flt.type=type||'bandpass';const st=a.currentTime+t0;
   flt.frequency.setValueAtTime(f0||3000,st);flt.frequency.exponentialRampToValueAtTime(f1||f0||3000,st+dur);flt.Q.value=q??0.7;
@@ -175,8 +179,8 @@ const BGM=(()=>{
 let SCREEN='main';
 function music(){BGM.play(SCREEN==='room'?'room':SCREEN==='route'?'route':'main');}
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){abortListen();acStale=true;if(AC&&AC.suspend)AC.suspend().catch?.(()=>{});}
-  else if(AC&&AC.state!=='running'&&AC.state!=='closed'){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}});
+  if(document.hidden){abortListen();goSilent();}
+  else{AWAY=false;}});  // sound comes back on the next touch (audioKick rebuilds the context)
 window.addEventListener('pagehide',()=>abortListen());
 const firstTouch=()=>{audioKick();if(!BGM.started&&DB.settings.music)music();};
 document.addEventListener('pointerdown',firstTouch,{capture:true});
@@ -212,17 +216,17 @@ let rec=null,heard='',recDone=null,recHold=false,recTries=0;
 function startRec(){
   const r=new SRec();rec=r;r.lang='ko-KR';r.interimResults=true;r.continuous=true;
   r.onresult=e=>{if(rec!==r)return;let t='';for(const x of e.results)t+=x[0].transcript;heard=t.trim();say('듣고 있어…<div class="hint" style="color:var(--yel)">'+esc(heard)+'</div>',{cursor:false});};
-  r.onerror=e=>{if(rec!==r)return;if(e.error==='not-allowed'||e.error==='service-not-allowed'){recHold=false;rec=null;BGM.duck(false);typeInput('마이크를 못 써서 글로 받을게.');}};
+  r.onerror=e=>{if(rec!==r)return;if(e.error==='not-allowed'||e.error==='service-not-allowed'){recHold=false;rec=null;MICOPEN=false;acStale=true;BGM.duck(false);typeInput('마이크를 못 써서 글로 받을게.');}};
   r.onend=()=>{r._ended=true;if(rec!==r)return;
     if(recDone){const f=recDone;recDone=null;f();return;}
     if(recHold&&!heard&&recTries<4){recTries++;setTimeout(()=>{if(recHold&&rec===r){try{startRec();}catch(e){}}},150);}};
   r.start();}
-function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKick();
+function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKick();BGM.stop();MICOPEN=true;
   if(rec){try{rec.abort();}catch(e){}rec=null;}
   try{BGM.duck(true);startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}
-  catch(e){try{startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;BGM.duck(false);return false;}}}
-function abortListen(){const was=!!rec;recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();if(was)acStale=true;}
-function stopListen(){recHold=false;return new Promise(res=>{if(!rec){BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;BGM.duck(false);ambientSession();acStale=true;res(heard);}};  // next touch rebuilds the audio (mic leaves iOS on the quiet route)
+  catch(e){try{startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;MICOPEN=false;BGM.duck(false);return false;}}}
+function abortListen(){const was=!!rec||MICOPEN;MICOPEN=false;recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();if(was)acStale=true;}
+function stopListen(){recHold=false;return new Promise(res=>{if(!rec){MICOPEN=false;acStale=true;BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;MICOPEN=false;BGM.duck(false);ambientSession();acStale=true;res(heard);}};  // next touch rebuilds the audio (mic leaves iOS on the quiet route)
   if(rec._ended)return fin();recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
 function typeInput(msg){S.mode='typing';
   say(esc(msg||'하고 싶은 걸 적어줘.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
@@ -243,7 +247,7 @@ function typeInput(msg){S.mode='typing';
       if(listening&&st.chat)say('응? 어디 가고 싶은데? 말해봐.<div class="hint">손을 떼면 끝나.</div>',{cursor:false});
       if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},chat?350:220);};
   const move=e=>{if(!st||listening||st.chat)return;const dy=e.clientY-st.y;
-    if(dy<-36){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
+    if(dy<-120){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
   const up=async e=>{if(!st)return;const p=st;clearTimeout(holdT);st=null;charEl.classList.remove('pressed');
     if(holdT===null&&listening){listening=false;S.mode='busy';const txt=await stopListen();if(txt)gotText(txt);else{S.mode='idle';say('어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?');}}
     else if(p.chat){if(S.mode==='chat'&&p.dlg&&!p.choice&&e.type==='pointerup')chatTap();}
@@ -525,8 +529,8 @@ function edgePull(listEl,onTop,onBottom){let y0=null,edge=null;
   listEl.addEventListener('touchstart',e=>{const atTop=listEl.scrollTop<=0,atBot=listEl.scrollTop+listEl.clientHeight>=listEl.scrollHeight-2;
     edge=atTop&&atBot?'both':atTop?'top':atBot?'bot':null;y0=edge?e.touches[0].clientY:null;},{passive:true});
   listEl.addEventListener('touchmove',e=>{if(y0==null)return;const dy=e.touches[0].clientY-y0;
-    if(dy>90&&onTop&&(edge==='top'||edge==='both')){y0=null;onTop();}
-    else if(dy<-90&&onBottom&&(edge==='bot'||edge==='both')){y0=null;onBottom();}},{passive:true});
+    if(dy>160&&onTop&&(edge==='top'||edge==='both')){y0=null;onTop();}
+    else if(dy<-160&&onBottom&&(edge==='bot'||edge==='both')){y0=null;onBottom();}},{passive:true});
   listEl.addEventListener('touchend',()=>{y0=null;},{passive:true});}
 function cardsResume(){S.mode='cards';charEl.classList.add('gone');setTimeout(()=>charEl.classList.remove('front'),700);$('#dimmer').classList.remove('on');setTimeout(()=>showDlg(false),10);}
 edgePull($('#cardList'),()=>{if(S.mode!=='cards')return;SFX.btn();S.mode='clearConfirm';
@@ -650,7 +654,7 @@ function startDrag(e,el){e.preventDefault();e.stopPropagation();audio();const bo
     if(!horiz&&R.mode==='hist'&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.3)horiz=true;
     if(horiz){const ni=R.idx+(dx<0?1:-1),edge=ni<0||ni>=DB.routes.length;const x=edge?dx*0.22:dx*0.9;s.dx=dx;
       box.style.transform=`translateX(${x}px) rotate(${x/90}deg)`;box.style.opacity=String(1-Math.min(Math.abs(x)/500,.45));}
-    else if(dy>90&&s.top&&Math.abs(dy)>Math.abs(dx)){s=null;closeRoute();}},{passive:true});
+    else if(dy>160&&s.top&&Math.abs(dy)>Math.abs(dx)){s=null;closeRoute();}},{passive:true});
   box.addEventListener('touchend',()=>{if(!s)return;const dx=s.dx;s=null;if(!horiz)return;horiz=false;
     const dir=dx<0?1:-1,ni=R.idx+dir;
     if(Math.abs(dx)<60||ni<0||ni>=DB.routes.length){box.style.transition='transform .28s cubic-bezier(.3,1.6,.5,1),opacity .2s';box.style.transform='';box.style.opacity='';
@@ -990,12 +994,6 @@ function openReset(){const ov=document.createElement('div');ov.className='overla
 /* ---------- sound experiment buttons (bottom of the room) ---------- */
 function soundTestHTML(){return `<div class="stest"><div class="note">소리 실험 · 소리가 작아졌을 때 하나씩 눌러보고, 돌아오는 버튼을 알려줘.</div>
   <div class="minibtns"><button class="px" data-st="A">A 재생 모드</button><button class="px" data-st="B">B 오디오 요소</button><button class="px" data-st="C">C 무음 재생</button></div></div>`;}
-
-/* ---------- 미연's waist: fade it out from the top edge of the small dialog box down (any screen height) ---------- */
-function fitChar(){const H=mainEl.clientHeight,c=charEl.getBoundingClientRect(),m=mainEl.getBoundingClientRect();if(!H||!c.height)return;
-  const boxTop=H*(1-0.104)-102,top=c.top-m.top;
-  charEl.style.setProperty('--fade',Math.max(40,Math.min(96,(boxTop+6-top)/c.height*100)).toFixed(1)+'%');}
-window.addEventListener('resize',fitChar);$('#charImg').addEventListener('load',fitChar);setTimeout(fitChar,0);
 
 /* ---------- boot ---------- */
 document.addEventListener('gesturestart',e=>e.preventDefault());
