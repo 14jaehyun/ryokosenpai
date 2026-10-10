@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="여행선배">
+<meta name="theme-color" content="#0c0e1a">
+<title>여행선배</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=2.0.1">
+</head>
+<body>
+<div id="app">
+
+  <!-- MAIN -->
+  <div id="main" class="screen">
+    <div class="bg"></div>
+    <div class="shade" id="mainShade"></div>
+    <div id="touch"></div>
+    <div id="char"><img id="charImg" alt="" src="miyeon.png"></div>
+
+    <div id="cardLayer" class="hidden">
+      <div class="head"><div class="title" id="reqTitle"></div><div class="pill px gold" id="pinCount">핀 0/3</div></div>
+      <div class="list" id="cardList"></div>
+      <button class="bottomBtn px gold hidden" id="routeBtn"></button>
+    </div>
+    <div id="dimmer"></div>
+
+    <div id="tut" class="hidden"></div>
+
+    <div id="dlgWrap">
+      <div class="tagname">미연</div>
+      <div id="dlg" class="px"></div>
+    </div>
+    <div id="loading" class="px solid hidden">찾는 중<span class="dots"></span></div>
+  </div>
+
+  <!-- ROOM (archive) -->
+  <div id="room" class="screen hidden">
+    <div class="bg"></div>
+    <div class="shade"></div>
+    <div class="pullhint" id="pullHint">▼ 당겨서 나가기 · 맨 아래에서 올리면 지난 동선</div>
+    <div class="head"><div class="title">보관함</div></div>
+    <div class="tabs"><button class="tab px on" data-tab="saved" id="tabSaved">저장</button><button class="tab px" data-tab="passed" id="tabPassed">지나친 카드</button></div>
+    <div class="list" id="roomList"></div>
+    <button class="bottomBtn px gold hidden" id="roomRouteBtn"></button>
+  </div>
+
+  <!-- ROUTE -->
+  <div id="route" class="screen hidden">
+    <div class="head"><div class="title" id="routeTitle">이동 순서</div></div>
+    <button class="gback" id="routeBack">닫기</button>
+    <div class="meta" id="routeMeta">카드를 끌어서 순서를 바꿀 수 있어요.</div>
+    <div id="rlist"></div>
+    <div class="dots" id="routeDots"></div>
+    <div class="gbtns" id="gbtns"></div>
+  </div>
+
+  <div id="overlayHost"></div>
+  <div id="fader"></div>
+</div>
+<script src="app.js?v=2.0.1"></script>
+</body>
+</html>
