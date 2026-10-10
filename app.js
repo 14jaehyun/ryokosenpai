@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.10';
+const VERSION='2.0.11';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -33,7 +33,15 @@ const inKorea=p=>!!p&&p.lat>33&&p.lat<38.9&&p.lng>124.5&&p.lng<131.9;
 const PIN_SVG='<svg class="pin" viewBox="0 0 6 8" shape-rendering="crispEdges"><rect x="1" y="0" width="4" height="3" fill="#ffd66e"/><rect x="0" y="3" width="6" height="1" fill="#ffd66e"/><rect x="2" y="4" width="2" height="4" fill="#ffd66e"/></svg>';
 function toast(msg,ms=2200){const t=document.createElement('div');t.className='toast px solid';t.textContent=msg;$('#app').appendChild(t);setTimeout(()=>t.remove(),ms);}
 /* Korean Maps titles often come as "가게 | 용산 맛집 | English name ..." — keep only the real name */
-const placeTitle=c=>{const t=String(c.mapsTitle||'').split(/\s*[|｜]\s*/).map(x=>x.trim()).find(Boolean);return t||String(c.name||'').trim();};
+const cleanTitle=t=>{let x=String(t||'').split(/\s*[|｜]\s*/).map(y=>y.trim()).find(Boolean)||'';
+  return x.replace(/\s*[-–—:·]\s*(google\s*(maps|지도)|구글\s*(맵|지도))\s*$/i,'').trim();};
+const placeTitle=c=>cleanTitle(c.mapsTitle)||String(c.name||'').trim();
+const hasKo=t=>/[가-힣]/.test(t||'');
+/* does the model's name plausibly describe this verified Maps place? (only judgeable for Korean titles) */
+function sameKoPlace(names,title){const t=norm(cleanTitle(title));if(!t||!hasKo(t))return true;
+  for(const n of names){const k=norm(n);if(k.length<2)continue;if(t.includes(k)||k.includes(t))return true;
+    const ks=[...new Set(k)],common=ks.filter(ch=>t.includes(ch)).length;if(common>=2&&common/ks.length>=0.6)return true;}
+  return false;}
 const isKR=c=>c.lat!=null?inKorea(c):/(특별시|광역시|[가-힣]+[도시군구]\s|대한민국)/.test(c.address||'');
 /* Korea: name + 구/동 (Google Maps in Korea doesn't find "full address + name"). Elsewhere: unchanged (works well in Japan) */
 const regionKR=a=>{const m=String(a||'').match(/([가-힣]+(?:구|군))(?=\s)/)||String(a||'').match(/([가-힣]+시)(?=\s)/);return m?m[1]:'';};
@@ -50,16 +58,20 @@ function openExternal(appUrl,webUrl){
 function openGoogle(url){openExternal('comgooglemapsurl://'+url.replace(/^https?:\/\//,''),url);}
 /* ---------- sound effects (Web Audio, ambient: follows silent switch, no now-playing) ---------- */
 let AC=null,SFXOUT=null;
-/* re-assert the 'ambient' audio session. After the mic or another app has used audio, iOS can leave the page in a
-   record session that plays through the quiet earpiece route — flipping the type forces WebKit to re-apply it. */
-function ambientSession(){const s=navigator.audioSession;if(!s)return;try{if(s.type==='ambient')s.type='auto';s.type='ambient';}catch(e){}}
+/* audio session type.
+   'ambient' mixes with other apps — and gets ducked by them: Google Maps keeps its (ducking) session alive in the
+   background, so after a Maps trip everything here played at a whisper. With music on we use 'transient-solo'
+   (still follows the silent switch, but takes the audio over instead of being ducked). Music off → 'ambient'.
+   Re-applied after the mic (which leaves a quiet earpiece/record route) and on every return to the app. */
+function ambientSession(){const s=navigator.audioSession;if(!s)return;const want=DB.settings.music?'transient-solo':'ambient';
+  try{if(s.type===want)s.type='auto';s.type=want;}catch(e){}}
 function audio(){try{if(!AC){ambientSession();AC=new(window.AudioContext||window.webkitAudioContext)();
     SFXOUT=AC.createGain();SFXOUT.gain.value=1;SFXOUT.connect(AC.destination);}
   if(AC.state!=='running'&&AC.state!=='closed'&&!document.hidden){const p=AC.resume();if(p&&p.catch)p.catch(()=>{});}}catch(e){}return AC;}
 /* iOS leaves the context 'interrupted' (not 'suspended') after leaving the app.
    On any touch: if it isn't running, resume; if that doesn't take within 350ms, throw it away and build a new one. */
 let acFixing=null,acStale=false;
-function rebuildAudio(){const old=AC;AC=null;SFXOUT=null;BGM.reset();try{old&&old.close();}catch(e){}audio();if(DB.settings.music)music();}
+function rebuildAudio(){const old=AC;AC=null;SFXOUT=null;BGM.reset();try{old&&old.close();}catch(e){}ambientSession();audio();if(DB.settings.music)music();}
 function audioKick(){if(document.hidden)return;
   if(AC&&AC.state==='closed'){AC=null;SFXOUT=null;BGM.reset();}
   /* first touch after coming back from another app: build a fresh context inside this touch (it starts running
@@ -227,8 +239,8 @@ function typeInput(msg){S.mode='typing';
 
 function gotText(txt){
   if(/설정/.test(txt)){openSettings();return;}
-  if(/(음악|배경음|bgm)/i.test(txt)&&/(꺼|끄|멈|그만|조용)/.test(txt)){DB.settings.music=false;save();BGM.stop();say('음악을 껐어요.<div class="hint">"음악 켜줘"라고 하면 다시 틀어요.</div>');S.mode='idle';return;}
-  if(/(음악|배경음|bgm)/i.test(txt)&&/(켜|틀|다시)/.test(txt)){DB.settings.music=true;save();music();say('음악을 다시 틀었어요.');S.mode='idle';return;}
+  if(/(음악|배경음|bgm)/i.test(txt)&&/(꺼|끄|멈|그만|조용)/.test(txt)){DB.settings.music=false;save();BGM.stop();ambientSession();say('음악을 껐어요.<div class="hint">"음악 켜줘"라고 하면 다시 틀어요.</div>');S.mode='idle';return;}
+  if(/(음악|배경음|bgm)/i.test(txt)&&/(켜|틀|다시)/.test(txt)){DB.settings.music=true;save();ambientSession();music();say('음악을 다시 틀었어요.');S.mode='idle';return;}
   if(/취향/.test(txt)&&/(다시|새로|바꿀|정할)/.test(txt)){startTutorial();return;}
   S.mode='confirm';
   say(`<span class="q">“${esc(txt)}”</span><br>이게 맞나요?`,{choices:[{label:'네',fn:()=>startSearch(txt)},{label:'아니요',fn:()=>{S.mode='idle';say('다시 말해주세요.<br>화면을 꾹 누른 채로요.');}}]});
@@ -271,22 +283,16 @@ ${profileText()}
 - mapsTitle은 Google 지도에 등록된 이름을 글자 그대로(현지어 그대로) 적어라. address는 Google 지도의 주소 그대로.
 출력은 설명 없이 JSON 배열만:
 [{"name":"한국어 표시 이름","mapsTitle":"Google 지도 등록 이름 그대로","address":"Google 지도 주소 그대로","line1":"한 줄 설명 18자 안팎","line2":"한 줄 설명 20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":["현금만","흡연 가능","예약 필요" 같은 주의사항, 최대 3개, 없으면 빈 배열],"area":"지역명 예: 서울 용산"}]`;}
-/* loading readout: stage + elapsed, shown in green dot letters under the window only while a finger is on the screen */
+/* loading readout: stage + elapsed, shown in small dark-green text under the window only while a finger is on the screen */
 const LD={stage:'',t0:0,timer:null,held:false};
 function setStage(t){LD.stage=t;drawLdInfo();}
 window.setStage=setStage;
 function ldVisible(){const el=$('#loading');return el&&!el.classList.contains('hidden');}
-function drawLdInfo(){const cv=$('#ldInfo');if(!cv)return;
-  if(!LD.held||!ldVisible()){cv.classList.add('hidden');return;}
-  const secs=Math.floor((Date.now()-LD.t0)/1000),lines=[LD.stage||'준비 중',`경과 ${secs}초`];
-  const F=11,LH=14,PAD=2,SC=2,c=document.createElement('canvas'),x=c.getContext('2d');x.font=`700 ${F}px 'Apple SD Gothic Neo','Noto Sans KR',sans-serif`;
-  const w=Math.ceil(Math.max(...lines.map(l=>x.measureText(l).width)))+PAD*2,h=LH*lines.length+PAD*2;
-  c.width=w;c.height=h;x.font=`700 ${F}px 'Apple SD Gothic Neo','Noto Sans KR',sans-serif`;x.textBaseline='top';x.textAlign='center';x.fillStyle='#fff';
-  lines.forEach((l,i)=>x.fillText(l,w/2,PAD+i*LH+1));
-  const d=x.getImageData(0,0,w,h),p=d.data;for(let i=0;i<p.length;i+=4){const on=p[i+3]>110;p[i]=0x3a;p[i+1]=0xb8;p[i+2]=0x5c;p[i+3]=on?255:0;}
-  cv.width=w;cv.height=h;cv.getContext('2d').putImageData(d,0,0);cv.style.width=w*SC+'px';cv.style.height=h*SC+'px';
-  const r=$('#loading').getBoundingClientRect(),host=$('#main').getBoundingClientRect();cv.style.top=(r.bottom-host.top+10)+'px';
-  cv.classList.remove('hidden');}
+function drawLdInfo(){const el=$('#ldInfo');if(!el)return;
+  if(!LD.held||!ldVisible()){el.classList.add('hidden');return;}
+  el.innerHTML=`${esc(LD.stage||'준비 중')}<br>경과 ${Math.floor((Date.now()-LD.t0)/1000)}초`;
+  const r=$('#loading').getBoundingClientRect(),host=$('#main').getBoundingClientRect();el.style.top=(r.bottom-host.top+8)+'px';
+  el.classList.remove('hidden');}
 function ldHold(on){LD.held=on;drawLdInfo();}
 document.addEventListener('touchstart',()=>ldHold(true),{capture:true,passive:true});
 document.addEventListener('touchend',e=>{if(!e.touches.length)ldHold(false);},{capture:true,passive:true});
@@ -340,14 +346,16 @@ function matchChunk(card,res){const keys=[card.mapsTitle,card.name].map(norm).fi
     if(keys.some(k=>k.length>=2&&seg.includes(k))){for(const i of sp.groundingChunkIndices||[]){const m=res.raw[i]?.maps;if(m)return m;}}}
   return null;}
 function jsonArr(txt){const a=txt.indexOf('['),b=txt.lastIndexOf(']');if(a<0||b<a)return null;try{const v=JSON.parse(txt.slice(a,b+1));return Array.isArray(v)?v:null;}catch(e){return null;}}
-function mkCard(c,ch){const pid=String(ch.placeId||'').replace(/^places\//,'');
-  return {id:uid(),name:String(c.name||ch.title),mapsTitle:String(ch.title||c.mapsTitle||c.name),placeId:pid,mapsUri:ch.uri||'',address:String(c.address||''),
+function mkCard(c,ch){const pid=String(ch.placeId||'').replace(/^places\//,'');const mt=cleanTitle(ch.title||c.mapsTitle||c.name);
+  /* Korean place whose model-given name doesn't match the verified place → show the verified name */
+  const nm=c.name&&sameKoPlace([c.name],mt)?String(c.name):mt;
+  return {id:uid(),name:nm,mapsTitle:mt,placeId:pid,mapsUri:ch.uri||'',address:String(c.address||''),
     line1:String(c.line1||''),line2:String(c.line2||''),kind:c.kind==='random'?'random':'taste',category:String(c.category||'기타'),
     lat:isFinite(+c.lat)&&+c.lat!==0&&c.lat!==null?+c.lat:null,lng:isFinite(+c.lng)&&+c.lng!==0&&c.lng!==null?+c.lng:null,hours:String(c.hours||''),open:c.open!==false,
     tags:Array.isArray(c.tags)?c.tags.slice(0,3).map(String):[],area:String(c.area||'')};}
 /* describe verified Maps places: look each one up on Google Maps (grounded), fall back to plain call */
 async function describeChunks(chs,ctxText,nR){
-  const list=chs.map((c,i)=>`${i}. ${c.title}`).join('\n');
+  const list=chs.map((c,i)=>`${i}. ${cleanTitle(c.title)}`).join('\n');
   const p=`아래 장소들은 Google 지도에서 확인된 실제 장소야. Google 지도 도구로 각 장소를 하나씩 찾아보고, 번호 순서대로 카드 정보를 채워.
 [사용자 요청] "${S.req}"
 [현재 위치] ${S.loc?S.loc.lat.toFixed(5)+','+S.loc.lng.toFixed(5):'모름'}
@@ -357,18 +365,23 @@ ${profileText()}
 ${list}
 [참고 메모]
 ${String(ctxText||'').slice(0,2500)}
-규칙: 번호마다 정확히 하나. 주소·좌표·영업시간은 Google 지도에 나온 그대로. 설명 두 줄은 이 장소가 어떤 곳인지 구체적으로(빈칸 금지). 취향과 반대 결인 곳 ${nR}개 정도는 kind "random".
+규칙: 번호마다 정확히 하나. "title"에는 목록의 장소 이름을 글자 그대로 옮겨 적고, 설명은 반드시 그 장소에 대한 것만. 주소·좌표·영업시간은 Google 지도에 나온 그대로. 설명 두 줄은 이 장소가 어떤 곳인지 구체적으로(빈칸 금지). 취향과 반대 결인 곳 ${nR}개 정도는 kind "random".
 출력은 JSON 배열만:
-[{"i":0,"name":"한국어 표시 이름","address":"Google 지도 주소","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
+[{"i":0,"title":"목록의 이름 그대로","name":"한국어 표시 이름","address":"Google 지도 주소","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
   let arr=null;
   try{const r=await gemini(p,S.loc,{timeout:40000});arr=jsonArr(r.text);}catch(e){if(/한도|결제|API 키/.test(e.message))throw e;}
   if(!arr){const r=await gemini(p,null,{tools:false,timeout:30000});arr=jsonArr(r.text)||[];}
-  return chs.map((ch,i)=>mkCard(arr.find(x=>+x.i===i)||arr[i]||{name:ch.title},ch));}
+  const tkey=t=>norm(cleanTitle(t));
+  return chs.map((ch,i)=>{const k=tkey(ch.title);
+    let it=arr.find(x=>x&&x.title&&tkey(x.title)===k)||arr.find(x=>x&&+x.i===i&&(!x.title||tkey(x.title)===k))||arr[i];
+    /* still describes another shop → keep the verified place, drop the wrong text */
+    if(it&&!sameKoPlace([it.title,it.name].filter(Boolean),ch.title))it={kind:it.kind,category:it.category,area:it.area};
+    return mkCard(it||{name:cleanTitle(ch.title)},ch);});}
 /* fill missing coordinates in the background (OpenStreetMap, free) */
 let geoBusy=false;
 async function geocodeMissing(){if(geoBusy)return;geoBusy=true;
   try{for(const c of [...S.cards,...S.queue]){if(c.lat!=null&&c.lng!=null)continue;
-    const qs=[c.address,[c.mapsTitle,c.area].filter(Boolean).join(' ')].filter(x=>x&&x.trim().length>3);
+    const qs=[c.address,[placeTitle(c),c.area].filter(Boolean).join(' ')].filter(x=>x&&x.trim().length>3);
     for(const q of qs){try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(q)}`);const j=await r.json();
         await sleep(1100);
         if(j&&j[0]){const p={lat:+j[0].lat,lng:+j[0].lon};if(!S.loc||distM(S.loc,p)<60000){c.lat=p.lat;c.lng=p.lng;c.approx=true;break;}}}catch(e){await sleep(1100);}}
@@ -383,7 +396,7 @@ async function fetchCards(nT,nR,bg){const setStage=bg?()=>{}:window.setStage;
   setStage('구글맵에서 찾는 중');
   let res=await gemini(buildPrompt(nT,nR),S.loc);
   const arr=jsonArr(res.text)||[];let left=[...res.chunks];
-  for(const c of arr){if(!c||!c.name)continue;const ch=matchChunk(c,res);if(!ch)continue;left=left.filter(x=>x!==ch);add(mkCard(c,ch));}
+  for(const c of arr){if(!c||!c.name)continue;const ch=matchChunk(c,res);if(!ch||!sameKoPlace([c.name,c.mapsTitle],ch.title))continue;left=left.filter(x=>x!==ch);add(mkCard(c,ch));}
   DIAG=`모델 ${arr.length}곳 · 구글맵 확인 ${res.chunks.length}곳 · 일치 ${got.length}곳`;
   if(got.length<Math.min(6,want)&&left.length){setStage('확인된 곳 정리 중');try{(await describeChunks(left.slice(0,want-got.length),res.text,nR)).forEach(add);}catch(e){}}
   if(got.length<3){setStage('한 번 더 찾는 중');
@@ -511,7 +524,7 @@ $('#routeBtn').onclick=()=>{if(!S.pins.length)return;SFX.btn();const pc=pinnedCa
 /* ---------- external links ---------- */
 function gSearch(c){const q=encodeURIComponent(searchText(c));return `https://www.google.com/maps/search/?api=1&query=${q}${c.placeId?`&query_place_id=${encodeURIComponent(c.placeId)}`:''}`;}
 function kSearch(c){const q=encodeURIComponent([regionKR(c.address),placeTitle(c)].filter(Boolean).join(' ')||c.name);return {app:`kakaomap://search?q=${q}`,web:`https://map.kakao.com/link/search/${q}`};}
-function ySearch(c){const q=encodeURIComponent((c.mapsTitle||c.name)+' '+(c.area||''));return {app:`youtube://www.youtube.com/results?search_query=${q}`,web:`https://www.youtube.com/results?search_query=${q}`};}
+function ySearch(c){const q=encodeURIComponent(placeTitle(c)+' '+(c.area||''));return {app:`youtube://www.youtube.com/results?search_query=${q}`,web:`https://www.youtube.com/results?search_query=${q}`};}
 function kakaoOK(items){const p=S.loc||items.find(c=>c.lat!=null);return DB.settings.links.kakao&&(p?inKorea(p):true);}
 
 /* ---------- detail window ---------- */
@@ -520,7 +533,7 @@ function openDetail(c){SFX.btn();const st=DB.settings.links;const d=distM(S.loc,
   const btns=[];if(st.google)btns.push('<button class="px" data-l="g">구글맵<small>지도 · 후기</small></button>');
   if(kakaoOK([c]))btns.push('<button class="px" data-l="k">카카오맵<small>지도</small></button>');
   if(st.youtube)btns.push('<button class="px" data-l="y">유튜브<small>관련 영상</small></button>');
-  ov.innerHTML=`<div class="win px solid"><h3>${esc(c.name)}</h3>${c.mapsTitle&&c.mapsTitle!==c.name?`<div class="sub" style="margin-bottom:4px">${esc(c.mapsTitle)}</div>`:''}
+  ov.innerHTML=`<div class="win px solid"><h3>${esc(c.name)}</h3>${placeTitle(c)&&placeTitle(c)!==c.name?`<div class="sub" style="margin-bottom:4px">${esc(placeTitle(c))}</div>`:''}
     <div class="sub">${esc(c.line1)}<br>${esc(c.line2)}</div><div class="sep"></div>
     <div class="row" style="color:${c.open?'#6ee696':'#a0aacc'}">■ ${c.open?'영업 중':'영업 시간 확인'}${c.hours?' · '+esc(c.hours):''}</div>
     ${d!=null?`<div class="row">현재 위치에서 도보 ${walkMin(d)}분 · ${fmtKm(d)}</div>`:''}
@@ -722,7 +735,7 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
   const close=()=>{ov.remove();showDlg(true);
     if(!DB.profile.done&&DB.settings.key.trim())startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
-    DB.settings.links=L;DB.settings.music=music;save();if(music)music_on();else BGM.stop();close();};
+    DB.settings.links=L;DB.settings.music=music;save();ambientSession();if(music)music_on();else BGM.stop();close();};
   ov.querySelector('#sClose').onclick=()=>{SFX.btn();close();};}
 function music_on(){music();}
 
