@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.11';
+const VERSION='2.0.12';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -85,16 +85,16 @@ function osc(type,f0,f1,t0,dur,vol,decay){const a=audio();if(!a)return;const o=a
   const s=a.currentTime+t0;o.frequency.setValueAtTime(f0,s);if(f1!==f0)o.frequency.linearRampToValueAtTime(f1,s+dur);
   g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(vol,s+0.004);g.gain.exponentialRampToValueAtTime(0.0008,s+Math.max(dur,decay||dur));
   o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+Math.max(dur,decay||dur)+0.02);}
-function noise(t0,dur,vol,type,f0,f1){const a=audio();if(!a)return;const n=Math.floor(a.sampleRate*dur),b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);
+function noise(t0,dur,vol,type,f0,f1,q,atk){const a=audio();if(!a)return;const n=Math.floor(a.sampleRate*dur),b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);
   for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
   const s=a.createBufferSource();s.buffer=b;const g=a.createGain(),flt=a.createBiquadFilter();flt.type=type||'bandpass';const st=a.currentTime+t0;
-  flt.frequency.setValueAtTime(f0||3000,st);flt.frequency.exponentialRampToValueAtTime(f1||f0||3000,st+dur);flt.Q.value=0.7;
-  g.gain.setValueAtTime(0.0001,st);g.gain.linearRampToValueAtTime(vol,st+dur*0.25);g.gain.exponentialRampToValueAtTime(0.0008,st+dur);
+  flt.frequency.setValueAtTime(f0||3000,st);flt.frequency.exponentialRampToValueAtTime(f1||f0||3000,st+dur);flt.Q.value=q??0.7;
+  g.gain.setValueAtTime(0.0001,st);g.gain.linearRampToValueAtTime(vol,st+dur*(atk??0.25));g.gain.exponentialRampToValueAtTime(0.0008,st+dur);
   s.connect(flt).connect(g).connect(SFXOUT);s.start(st);s.stop(st+dur+0.02);}
 const SFX={
   touch(){noise(0,0.02,0.35,'highpass',3000);osc('square',220,110,0.006,0.05,0.07,0.06);},
   trans(){osc('triangle',330,165,0,0.28,0.16,0.3);osc('triangle',165,262,0.40,0.32,0.14,0.34);},
-  swipe(){noise(0,0.2,0.9,'bandpass',2600,500);osc('triangle',520,180,0,0.16,0.08,0.18);},
+  swipe(){noise(0,0.18,0.364,'bandpass',1100,600,0.9,0.35);noise(0.05,0.12,0.156,'lowpass',700,300,0.5,0.3);},
   pin(){noise(0,0.012,0.3,'highpass',4000);osc('square',988,988,0.012,0.06,0.06,0.08);osc('square',1319,1319,0.072,0.2,0.06,0.22);},
   btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);}
 };
@@ -573,12 +573,36 @@ function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);l
   box.innerHTML=html;
   box.querySelectorAll('.rcard').forEach(el=>el.querySelector('.h').addEventListener('pointerdown',e=>startDrag(e,el)));
   const st=DB.settings.links;const btns=[];const useK=kakaoOK(R.items);const useG=st.google||!useK;
-  if(useG)btns.push(`<button class="gbtn" id="goG">Google Map으로 ▶</button>`);
-  if(useK){const n=R.items.length,k=Math.min(R.kIdx,n-1);btns.push(`<button class="gbtn" id="goK">카카오맵 ${n>1?(k+1)+'번':''} 찾기 ▶</button>`);}
-  const g=$('#gbtns');g.innerHTML=btns.join('');
+  const kr=R.items.length&&R.items.every(c=>c.lat!=null)?R.items.every(inKorea):(S.loc?inKorea(S.loc):false);
+  const useN=kr;                                   // 네이버지도: route screen only, Korea only (test)
+  const allXY=R.items.every(c=>c.lat!=null&&c.lng!=null);
+  const many=[useG,useK,useN].filter(Boolean).length>=3;
+  if(useG)btns.push(`<button class="gbtn" id="goG">${many?'구글 ▶':'Google Map으로 ▶'}</button>`);
+  if(useK){if(allXY)btns.push(`<button class="gbtn" id="goK">${many?'카카오 ▶':'카카오맵 동선 ▶'}</button>`);
+    else{const n=R.items.length,k=Math.min(R.kIdx,n-1);btns.push(`<button class="gbtn" id="goK">카카오 ${n>1?(k+1)+'번':''} 찾기 ▶</button>`);}}
+  if(useN)btns.push(`<button class="gbtn" id="goN">네이버<small>테스트</small></button>`);
+  const g=$('#gbtns');g.innerHTML=btns.join('');g.classList.toggle('three',many);
   if($('#goG'))$('#goG').onclick=()=>{SFX.btn();openGoogle(gmapsUrl());if(R.mode==='new')setTimeout(finishRoute,600);};
-  if($('#goK'))$('#goK').onclick=()=>{SFX.btn();const k=Math.min(R.kIdx,R.items.length-1);const u=kSearch(R.items[k]);openExternal(u.app,u.web);
-    R.kIdx=(k+1)%R.items.length;setTimeout(()=>renderRoute(new Set()),800);};}
+  if($('#goK'))$('#goK').onclick=()=>{SFX.btn();
+    if(allXY){const u=kakaoRouteUrl();openExternal(u.app,u.web);if(R.mode==='new')setTimeout(finishRoute,600);return;}
+    /* some place has no coordinates yet → old behaviour: open the places one by one */
+    const k=Math.min(R.kIdx,R.items.length-1);const u=kSearch(R.items[k]);openExternal(u.app,u.web);
+    R.kIdx=(k+1)%R.items.length;setTimeout(()=>renderRoute(new Set()),800);};
+  if($('#goN'))$('#goN').onclick=()=>{SFX.btn();const u=naverRouteUrl();openExternal(u.app,u.web);};}
+/* 카카오맵 도보 길찾기: 현재 위치 → 경유지(vp, vp2…vp5) → 마지막 핀. 좌표만 받음 */
+function kakaoRouteUrl(){const it=R.items,xy=c=>`${(+c.lat).toFixed(6)},${(+c.lng).toFixed(6)}`;
+  const pts=S.loc?[S.loc,...it]:[...it];const sp=pts.length>1?pts[0]:null,ep=pts[pts.length-1],vias=pts.slice(sp?1:0,-1).slice(0,5);
+  const q=[sp?`sp=${xy(sp)}`:'',...vias.map((c,i)=>`${i?'vp'+(i+1):'vp'}=${xy(c)}`),`ep=${xy(ep)}`,'by=foot'].filter(Boolean).join('&');
+  return {app:`kakaomap://route?${q}`,web:`https://m.map.kakao.com/scheme/route?${q}`};}
+/* 네이버지도 도보 길찾기 (테스트): 이름까지 넘김. 경유지는 v1~v5 */
+function naverRouteUrl(){const it=R.items,e=encodeURIComponent,nm=c=>e(placeTitle(c)||c.name||'');
+  const P=[];if(S.loc){P.push(`slat=${S.loc.lat}`,`slng=${S.loc.lng}`,`sname=${e('현재 위치')}`);}
+  const dest=it[it.length-1],vias=(S.loc?it.slice(0,-1):it.slice(1,-1)).slice(0,5);
+  if(!S.loc&&it.length>1){const s0=it[0];P.push(`slat=${s0.lat}`,`slng=${s0.lng}`,`sname=${nm(s0)}`);}
+  P.push(`dlat=${dest.lat}`,`dlng=${dest.lng}`,`dname=${nm(dest)}`);
+  vias.forEach((c,i)=>P.push(`v${i+1}lat=${c.lat}`,`v${i+1}lng=${c.lng}`,`v${i+1}name=${nm(c)}`));
+  P.push(`appname=${e(location.origin+location.pathname)}`);
+  return {app:`nmap://route/walk?${P.join('&')}`,web:`https://map.naver.com/p/search/${e(placeTitle(dest)||dest.name)}`};}
 function gmapsUrl(){const it=R.items;if(!it.length)return'#';const dest=it[it.length-1],way=it.slice(0,-1);
   const allIds=it.every(c=>c.placeId);let u=`https://www.google.com/maps/dir/?api=1${S.loc?`&origin=${S.loc.lat},${S.loc.lng}`:''}&destination=${encodeURIComponent(searchText(dest))}`;
   if(allIds)u+=`&destination_place_id=${encodeURIComponent(dest.placeId)}`;
