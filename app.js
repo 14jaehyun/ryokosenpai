@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.4';
+const VERSION='2.0.5';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -232,59 +232,88 @@ ${profileText()}
 - mapsTitle은 Google 지도에 등록된 이름을 글자 그대로(현지어 그대로) 적어라. address는 Google 지도의 주소 그대로.
 출력은 설명 없이 JSON 배열만:
 [{"name":"한국어 표시 이름","mapsTitle":"Google 지도 등록 이름 그대로","address":"Google 지도 주소 그대로","line1":"한 줄 설명 18자 안팎","line2":"한 줄 설명 20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":["현금만","흡연 가능","예약 필요" 같은 주의사항, 최대 3개, 없으면 빈 배열],"area":"지역명 예: 서울 용산"}]`;}
-async function gemini(prompt,loc){
+function setStage(t){const el=$('#loading');if(el&&!el.classList.contains('hidden'))el.querySelector('.stage').textContent=t;}
+async function post(url,body,ms){const ac=new AbortController();const to=setTimeout(()=>ac.abort(),ms);
+  try{return await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ac.signal});}finally{clearTimeout(to);}}
+/* tools=false → plain call (no grounding, no Maps fee) */
+async function gemini(prompt,loc,opt={}){
   const st=DB.settings;const model=(st.model||DEFAULT_MODEL).trim();
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(st.key.trim())}`;
   const ll=loc?{retrievalConfig:{latLng:{latitude:loc.lat,longitude:loc.lng}}}:null;
-  const sets=[{tools:[{googleMaps:{}},{googleSearch:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:null},{tools:[{google_maps:{}}],tc:null}];
-  let lastErr='',lastStatus=0;
+  const sets=opt.tools===false?[{tools:null,tc:null}]:[{tools:[{googleMaps:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:null},{tools:[{googleMaps:{}},{googleSearch:{}}],tc:ll}];
+  let lastErr='',lastStatus=0,timeouts=0;
   for(const set of sets){
-    const body={contents:[{role:'user',parts:[{text:prompt}]}],tools:set.tools};
-    if(set.tc)body.toolConfig=set.tc;
+    const body={contents:[{role:'user',parts:[{text:prompt}]}]};if(set.tools)body.tools=set.tools;if(set.tc)body.toolConfig=set.tc;
     for(let attempt=0;attempt<2;attempt++){
-      let r;try{r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}catch(e){lastErr='net';await sleep(1200);continue;}
-      if(r.ok){const j=await r.json();const c=j.candidates?.[0]||{};
-        return {text:(c.content?.parts||[]).map(p=>p.text||'').join(''),chunks:(c.groundingMetadata?.groundingChunks||[]).map(x=>x.maps).filter(Boolean)};}
+      let r;try{r=await post(url,body,opt.timeout||45000);}
+      catch(e){if(e.name==='AbortError'){timeouts++;if(timeouts>=2)throw new Error('구글 응답이 너무 늦어요. 잠시 후 다시 하거나 더 빠른 모델(lite)로 바꿔보세요.');continue;}
+        lastErr='net';await sleep(1200);continue;}
+      if(r.ok){const j=await r.json();const c=j.candidates?.[0]||{};const gm=c.groundingMetadata||{};
+        return {text:(c.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join(''),raw:gm.groundingChunks||[],
+          chunks:(gm.groundingChunks||[]).map(x=>x.maps).filter(Boolean),supports:gm.groundingSupports||[]};}
       const t=await r.text();lastStatus=r.status;
       try{lastErr=JSON.parse(t).error?.message||t;}catch(e){lastErr=t;}
       if(r.status===429){throw new Error(/free|limit: ?0/i.test(lastErr)?'무료 API 키로는 구글맵 확인을 쓸 수 없어요. 구글 AI Studio에서 결제를 연결해야 해요.':'구글맵 확인 한도를 넘었어요. 잠시 후 다시 해주세요.');}
       if(r.status===503||r.status===500){await sleep(1500);continue;}
       if(/API key not valid|API_KEY_INVALID/i.test(lastErr))throw new Error('API 키를 확인해주세요.');
       if(r.status===404)throw new Error('모델 이름을 확인해주세요: '+model);
-      break; // try next request form
+      break;
     }
   }
   if(lastErr==='net')throw new Error('인터넷 연결을 확인해주세요.');
-  throw new Error(`구글맵 확인 요청이 거절됐어요. (${lastStatus}) 구글 메시지: ${String(lastErr).slice(0,180)}`);
+  throw new Error(`구글 요청이 거절됐어요. (${lastStatus||'시간 초과'}) ${String(lastErr).slice(0,160)}`);
 }
 const norm=s=>String(s||'').toLowerCase().normalize('NFKC').replace(/[\s·・\-_,.()（）\[\]【】'"`~!@#$%^&*+=:;/\\|<>?]/g,'');
-function matchChunk(card,chunks){const keys=[card.mapsTitle,card.name].map(norm).filter(k=>k.length>=2);
+function matchChunk(card,res){const keys=[card.mapsTitle,card.name].map(norm).filter(k=>k.length>=2);
   let best=null,score=0;
-  for(const ch of chunks){const t=norm(ch.title);if(!t)continue;
+  for(const ch of res.chunks){const t=norm(ch.title);if(!t)continue;
     for(const k of keys){let s=0;if(t===k)s=3;else if(t.includes(k)||k.includes(t))s=2;
       else{let common=0;for(const c of new Set(k))if(t.includes(c))common++;const r=common/Math.max(new Set(k).size,1);if(r>=0.8&&k.length>=3)s=1;}
       if(s>score){score=s;best=ch;}}}
-  return best;}
-function parseCards(res){const txt=res.text;const a=txt.indexOf('['),b=txt.lastIndexOf(']');if(a<0||b<a)throw new Error('추천을 읽지 못했어요. 다시 해볼게요.');
-  let arr;try{arr=JSON.parse(txt.slice(a,b+1));}catch(e){throw new Error('추천을 읽지 못했어요. 다시 해볼게요.');}
-  if(!res.chunks.length)throw new Error('구글맵에서 확인된 곳이 없어서 보여드리지 않을게요. 지역을 넣어서 다시 말해주세요.');
-  const used=new Set();const out=[];
-  for(const c of arr){if(!c||!c.name)continue;const ch=matchChunk(c,res.chunks);if(!ch)continue;
-    const pid=String(ch.placeId||'').replace(/^places\//,'');if(pid&&used.has(pid))continue;if(pid)used.add(pid);
-    if(S.shownNames.includes(c.name))continue;
-    out.push({id:uid(),name:String(c.name),mapsTitle:String(ch.title||c.mapsTitle||c.name),placeId:pid,mapsUri:ch.uri||'',address:String(c.address||''),
-      line1:String(c.line1||''),line2:String(c.line2||''),kind:c.kind==='random'?'random':'taste',category:String(c.category||'기타'),
-      lat:isFinite(+c.lat)&&+c.lat!==0?+c.lat:null,lng:isFinite(+c.lng)&&+c.lng!==0?+c.lng:null,hours:String(c.hours||''),open:c.open!==false,
-      tags:Array.isArray(c.tags)?c.tags.slice(0,3).map(String):[],area:String(c.area||'')});}
-  return out;}
+  if(best)return best;
+  /* second chance: the text span that names this card is grounded to a Maps chunk */
+  for(const sp of res.supports){const seg=norm(sp.segment?.text);if(!seg)continue;
+    if(keys.some(k=>k.length>=2&&seg.includes(k))){for(const i of sp.groundingChunkIndices||[]){const m=res.raw[i]?.maps;if(m)return m;}}}
+  return null;}
+function jsonArr(txt){const a=txt.indexOf('['),b=txt.lastIndexOf(']');if(a<0||b<a)return null;try{const v=JSON.parse(txt.slice(a,b+1));return Array.isArray(v)?v:null;}catch(e){return null;}}
+function mkCard(c,ch){const pid=String(ch.placeId||'').replace(/^places\//,'');
+  return {id:uid(),name:String(c.name||ch.title),mapsTitle:String(ch.title||c.mapsTitle||c.name),placeId:pid,mapsUri:ch.uri||'',address:String(c.address||''),
+    line1:String(c.line1||''),line2:String(c.line2||''),kind:c.kind==='random'?'random':'taste',category:String(c.category||'기타'),
+    lat:isFinite(+c.lat)&&+c.lat!==0&&c.lat!==null?+c.lat:null,lng:isFinite(+c.lng)&&+c.lng!==0&&c.lng!==null?+c.lng:null,hours:String(c.hours||''),open:c.open!==false,
+    tags:Array.isArray(c.tags)?c.tags.slice(0,3).map(String):[],area:String(c.area||'')};}
+/* describe verified Maps places (no tools → cheap) */
+async function describeChunks(chs,ctxText,nR){
+  const list=chs.map((c,i)=>`${i}. ${c.title}`).join('\n');
+  const p=`아래는 Google 지도에서 실제로 확인된 장소 목록과 참고 메모야. 이 목록에 있는 장소만, 번호 순서대로 카드 정보를 만들어.
+[사용자 요청] "${S.req}"
+[취향]
+${profileText()}
+[장소 목록]
+${list}
+[참고 메모]
+${String(ctxText||'').slice(0,3000)}
+규칙: 번호마다 정확히 하나. 모르는 값은 지어내지 말고 빈 문자열이나 null. 취향과 반대 결인 곳 ${nR}개 정도는 kind "random".
+출력은 JSON 배열만:
+[{"i":0,"name":"한국어 표시 이름","address":"주소(메모에 있으면)","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":null,"lng":null,"hours":"","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
+  const r=await gemini(p,null,{tools:false,timeout:30000});const arr=jsonArr(r.text)||[];
+  return chs.map((ch,i)=>mkCard(arr.find(x=>+x.i===i)||arr[i]||{name:ch.title},ch));}
+function naturalPrompt(n){return `${S.loc?`현재 위치(${S.loc.lat.toFixed(5)},${S.loc.lng.toFixed(5)}) 근처에서`:''} "${S.req}" 요청에 맞는 실제 장소 ${n}곳을 Google 지도에서 찾아줘. 지금 시각은 ${new Date().toLocaleString('ko-KR',{timeStyle:'short',dateStyle:'medium'})}. 지금 이용 가능한 곳만. 각 장소의 Google 지도 등록 이름, 주소, 한 줄 특징을 목록으로 적어줘. 이미 본 곳 제외: ${S.shownNames.slice(-30).join(', ')||'없음'}`;}
+let DIAG='';
 async function fetchCards(nT,nR){
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(700);return demoCards(nT,nR);}
-  let got=[];
-  for(let i=0;i<2&&got.length<3;i++){
-    const res=await gemini(buildPrompt(nT,nR),S.loc);
-    try{const p=parseCards(res);const seen=new Set(got.map(c=>c.placeId||c.name));p.forEach(c=>{if(!seen.has(c.placeId||c.name))got.push(c);});}
-    catch(e){if(i===1&&!got.length)throw e;}
-  }
+  const want=nT+nR;let got=[];const used=new Set(S.shownNames);const usedPid=new Set();
+  const add=c=>{if(!c||used.has(c.name)||(c.placeId&&usedPid.has(c.placeId)))return;used.add(c.name);if(c.placeId)usedPid.add(c.placeId);got.push(c);};
+  setStage('구글맵에서 찾는 중');
+  let res=await gemini(buildPrompt(nT,nR),S.loc);
+  const arr=jsonArr(res.text)||[];let left=[...res.chunks];
+  for(const c of arr){if(!c||!c.name)continue;const ch=matchChunk(c,res);if(!ch)continue;left=left.filter(x=>x!==ch);add(mkCard(c,ch));}
+  DIAG=`모델 ${arr.length}곳 · 구글맵 확인 ${res.chunks.length}곳 · 일치 ${got.length}곳`;
+  if(got.length<Math.min(6,want)&&left.length){setStage('확인된 곳 정리 중');try{(await describeChunks(left.slice(0,want-got.length),res.text,nR)).forEach(add);}catch(e){}}
+  if(got.length<3){setStage('한 번 더 찾는 중');
+    const r2=await gemini(naturalPrompt(want),S.loc);DIAG+=` / 재시도 확인 ${r2.chunks.length}곳`;
+    const fresh=r2.chunks.filter(ch=>!usedPid.has(String(ch.placeId||'').replace(/^places\//,'')));
+    if(fresh.length){setStage('확인된 곳 정리 중');try{(await describeChunks(fresh.slice(0,want),r2.text,nR)).forEach(add);}catch(e){}}}
+  if(!got.length&&!S.cards.length)throw new Error(`구글맵에서 확인된 곳을 못 찾았어요. 지역을 넣어서 다시 말해주세요.<div class="hint">${esc(DIAG)}</div>`);
   return got;}
 
 /* ---------- search flow ---------- */
@@ -292,7 +321,7 @@ async function startSearch(txt){
   if(!DB.settings.key.trim()){openSettings('먼저 제미나이 API 키를 넣어주세요.');return;}
   S.mode='loading';S.req=txt;S.queue=[];S.cards=[];S.pins=[];S.shownNames=[];S.groupId=null;S.area='';
   showDlg(false);charEl.classList.add('gone');$('#mainShade').style.opacity=.45;
-  await sleep(700);$('#loading').classList.remove('hidden');
+  await sleep(700);const ld=$('#loading');ld.innerHTML='찾는 중<span class="dots"></span><div class="stage"></div><div class="secs"></div>';ld.classList.remove('hidden');const t0=Date.now();const tick=setInterval(()=>{if(ld.classList.contains('hidden'))return clearInterval(tick);ld.querySelector('.secs').textContent=Math.round((Date.now()-t0)/1000)+'초';},1000);
   S.loc=await getLoc();
   try{const got=await fetchCards(10,5);if(!got.length)throw new Error('지금 갈 만한 곳을 확인하지 못했어요.');
     S.area=got.find(c=>c.area)?.area||'';
@@ -302,7 +331,7 @@ async function startSearch(txt){
     S.queue=[...t,...r];S.cards=first;first.concat(S.queue).forEach(c=>S.shownNames.push(c.name));
     $('#loading').classList.add('hidden');showCards();
     if(!S.loc)toast('현재 위치를 못 받아서 거리 표시가 빠져요');
-  }catch(e){$('#loading').classList.add('hidden');backToIdle();say(esc(e.message||'문제가 생겼어요.')+'<br>꾹 눌러서 다시 말해주세요.');}
+  }catch(e){$('#loading').classList.add('hidden');backToIdle();say((/<div/.test(e.message)?e.message:esc(e.message||'문제가 생겼어요.'))+'<br>꾹 눌러서 다시 말해주세요.');}
 }
 function backToIdle(){S.mode='idle';S.cards=[];S.pins=[];$('#cardLayer').classList.add('hidden');$('#dimmer').classList.remove('on');
   $('#mainShade').style.opacity=.30;charEl.classList.remove('gone','front');showDlg(true);sayIdle();}
@@ -607,13 +636,23 @@ function loadLeaflet(){if(window.L&&window.L.map)return Promise.resolve();if(lea
     const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';s.onload=res;s.onerror=()=>{leafletP=null;rej();};document.head.appendChild(s);});return leafletP;}
 async function pickOnMap(start,done){const ov=document.createElement('div');ov.className='overlay';ov.style.padding='0';
   ov.innerHTML=`<div class="picker"><div id="pmap"></div><div class="cross"></div>
-    <div class="ptop px solid">지도를 움직여서 가운데 핀을 지금 있는 곳에 맞춰주세요.</div>
+    <div class="ptop"><div class="px solid pmsg">지도를 움직여서 가운데 핀을 지금 있는 곳에 맞춰주세요.</div>
+      <div class="psearch"><input id="pQ" placeholder="장소·주소로 찾기 (예: 시부야역)" enterkeyhint="search" autocomplete="off"><button class="px gold" id="pGo">찾기</button></div></div>
     <div class="pbtm"><button class="px gold" id="pOk">이 위치로</button><button class="px" id="pNo">취소</button></div></div>`;
   $('#overlayHost').appendChild(ov);ov.querySelector('#pNo').onclick=()=>{SFX.btn();ov.remove();};
   try{await loadLeaflet();}catch(e){ov.remove();toast('지도를 불러오지 못했어요. 인터넷 연결을 확인해 주세요');return;}
-  const c=start||DB.lastLoc||{lat:37.5665,lng:126.9780};
-  const map=window.L.map(ov.querySelector('#pmap'),{zoomControl:false,attributionControl:true}).setView([c.lat,c.lng],start?17:12);
-  window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  const c=start||DB.lastLoc||{lat:37.5665,lng:126.9780};const Lf=window.L;
+  const map=Lf.map(ov.querySelector('#pmap'),{zoomControl:false,attributionControl:true}).setView([c.lat,c.lng],start?17:12);
+  /* Korea: OSM (Korean labels). Abroad: Esri street map (English labels, readable) */
+  const osm=Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const esri=Lf.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  let cur=null;const pick=()=>{const p=map.getCenter();const want=inKorea({lat:p.lat,lng:p.lng})?osm:esri;if(want!==cur){if(cur)map.removeLayer(cur);want.addTo(map);cur=want;}};
+  pick();map.on('moveend',pick);
+  const q=ov.querySelector('#pQ');
+  const go=async()=>{const v=q.value.trim();if(!v)return;q.blur();SFX.btn();
+    try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko&q=${encodeURIComponent(v)}`);const j=await r.json();
+      if(j&&j[0]){map.setView([+j[0].lat,+j[0].lon],17);}else toast('못 찾았어요. 더 큰 지명이나 주소로 해보세요');}catch(e){toast('검색이 안 돼요. 지도를 직접 움직여 주세요');}};
+  ov.querySelector('#pGo').onclick=go;q.onkeydown=e=>{if(e.key==='Enter')go();};
   ov.querySelector('#pOk').onclick=()=>{const p=map.getCenter();ov.remove();done(+p.lat.toFixed(6),+p.lng.toFixed(6));};}
 
 /* ---------- tutorial ---------- */
