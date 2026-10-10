@@ -33,13 +33,14 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 
 /* main */
 #touch{position:absolute;inset:0;z-index:1;touch-action:none}
-#char{position:absolute;right:3.6%;bottom:3.4%;width:53.3%;z-index:3;pointer-events:none;transition:opacity .7s linear,bottom .42s steps(5)}
-#char.up{bottom:22%}  /* chatting with 미연 */
+#char{position:absolute;right:2.4%;bottom:21.66%;width:53.3%;z-index:3;pointer-events:none;transition:opacity .7s linear}  /* fixed — from the layout pptx; her waist hides behind the dialog box */
 #char img{width:100%;display:block;filter:drop-shadow(7px 6px 2px rgba(8,10,20,.5));image-rendering:auto}
 #char.pressed img{transform:translate(7px,6px);filter:none}
 #char.gone{opacity:0}
 #char.front{z-index:6}
 #char.fluster img{animation:fluster .5s steps(5)}
+#char.huff img{animation:huff .45s steps(4)}
+@keyframes huff{0%,100%{transform:translateY(0)}25%{transform:translateY(-8px)}50%{transform:translateY(0)}75%{transform:translateY(-5px)}}
 @keyframes fluster{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
 /* chat with 미연 */
 .choices.v{flex-direction:column;gap:0;margin-top:10px}
@@ -50,8 +51,10 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 #dlg .me{color:var(--yel);font-size:13px;display:block;margin-bottom:4px}
 #dlg .think{letter-spacing:2px}
 #dlg .think::after{content:'';animation:dots 1.2s steps(4) infinite}
-#dlgWrap{position:absolute;left:5.4%;right:5.4%;bottom:6.4%;z-index:7;pointer-events:auto;touch-action:none}  /* tap the box = chat with 미연; hold = talk, same as the screen */
-#dlg{min-height:100px;padding:14px 18px 12px;font-weight:700;font-size:16px;line-height:1.5}
+#dlgWrap{position:absolute;left:5.4%;right:5.4%;bottom:10.4%;z-index:7;pointer-events:auto;touch-action:none;transition:bottom .3s steps(6)}
+#dlgWrap.big{bottom:5.9%}  /* chatting: the box grows up and down (layout pptx: 대화창 최소 → 최대) */  /* tap the box = chat with 미연; hold = talk, same as the screen */
+#dlg{min-height:100px;padding:14px 18px 12px;font-weight:700;font-size:16px;line-height:1.5;transition:min-height .3s steps(6)}
+#dlgWrap.big #dlg{min-height:222px}
 #dlg .q{color:var(--yel)}
 #dlg .hint{color:var(--muted);font-weight:400;font-size:12px;margin-top:6px}
 #dlg .cursor{position:absolute;right:14px;bottom:9px;font-size:12px;color:var(--light);animation:blink 1s steps(1) infinite}

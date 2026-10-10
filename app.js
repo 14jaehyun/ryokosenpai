@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.15';
+const VERSION='2.0.17';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -232,15 +232,21 @@ function typeInput(msg){S.mode='typing';
 
 /* ---------- main touch: hold to talk / swipe up to room / tap Miyeon / tap the dialog box = chat ---------- */
 (function(){let st=null,holdT=null,listening=false;
-  const down=e=>{
-    if(e.currentTarget===dlgWrap&&S.mode==='chat'){if(!e.target.closest('.choice'))chatTap();return;}
-    if(S.mode!=='idle')return;audio();st={x:e.clientX,y:e.clientY,dlg:e.currentTarget===dlgWrap};listening=false;
-    charEl.classList.add('pressed');SFX.touch();
-    holdT=setTimeout(()=>{holdT=null;if(!st)return;listening=listen();if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},220);};
-  const move=e=>{if(!st||listening)return;const dy=e.clientY-st.y;
+  const down=e=>{const chat=S.mode==='chat';
+    if(!chat&&S.mode!=='idle')return;audio();
+    st={x:e.clientX,y:e.clientY,dlg:e.currentTarget===dlgWrap,chat,choice:!!e.target.closest('.choice')};listening=false;
+    if(!chat){charEl.classList.add('pressed');SFX.touch();}
+    /* hold = talk. During a chat (anywhere, even on the box or a choice) it ends the chat and goes to recommendations */
+    holdT=setTimeout(()=>{holdT=null;if(!st)return;
+      if(st.chat){if(S.mode!=='chat')return;leaveChat();charEl.classList.add('pressed');SFX.touch();}
+      listening=listen();
+      if(listening&&st.chat)say('응? 어디 가고 싶은데? 말해봐.<div class="hint">손을 떼면 끝나.</div>',{cursor:false});
+      if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},chat?350:220);};
+  const move=e=>{if(!st||listening||st.chat)return;const dy=e.clientY-st.y;
     if(dy<-36){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
   const up=async e=>{if(!st)return;const p=st;clearTimeout(holdT);st=null;charEl.classList.remove('pressed');
     if(holdT===null&&listening){listening=false;S.mode='busy';const txt=await stopListen();if(txt)gotText(txt);else{S.mode='idle';say('어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?');}}
+    else if(p.chat){if(S.mode==='chat'&&p.dlg&&!p.choice&&e.type==='pointerup')chatTap();}
     else if(S.mode==='idle'&&e.type==='pointerup'){if(p.dlg)startChat();
       else if(!charTapped(p.x,p.y))say('화면을 <span class="q">꾹 누른 채로</span> 말해줘.<div class="hint">위로 밀면 보관함으로 가. 대사창을 누르면 나랑 수다 떨 수 있어.</div>');}
     holdT=null;};
@@ -866,11 +872,14 @@ function demoCards(nT,nR){const out=[];let t=0,r=0;for(let k=0;k<DEMO.length*2&&
 const MIYEON=`너는 여행 추천 앱 "여행선배"의 캐릭터 '미연'이야. 사용자의 여행 선배.
 성격: 순수하고 남을 먼저 배려해. 선배인 척 아는 척을 하지만 알고 보면 허당이야(아는 척하다 틀리고, 길을 헷갈리고, 말이 꼬이고, 그래도 혼자 뿌듯해함). 귀여워.
 자기가 예쁘고 인기 많다는 걸 전혀 몰라. 그래서 칭찬이나 설레는 말을 들으면 진심으로 당황하거나 엉뚱하게 받아들여(예: 자기 얘기가 아니라고 생각함).
+순수하고 착하지만, 후배가 놀리면 발끈할 때도 있어(투덜대거나 삐친 척하다가 금방 풀림).
 말투: 항상 반말. 대사는 1~2문장, 70자 이내. 이모지·이모티콘 금지. "헤헤", "앗", "음…" 같은 말버릇은 가끔만.
 사용자 이름은 모르니까 이름으로 부르지 마. 부를 일이 있으면 "후배"라고만.
 여기서는 가벼운 수다만 해. 실제 가게나 장소 이름을 지어내지 마.`;
 const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','미연이 요즘 연습하는 것'];
-const CHAT_MAX=3;  // how many answers you get to pick before she wraps up
+/* she can wrap up only after 3+ answers — then by chance, more likely the longer it goes (always by 8) */
+const CHAT_MIN=3,CHAT_END=[0,0,0,.35,.5,.65,.8,.9];
+const chatShouldEnd=n=>n>=8||(n>=CHAT_MIN&&Math.random()<CHAT_END[n]);
 const C={hist:[],picks:0,gen:0,typing:null,ended:false,busy:false};
 function chatCtx(){const now=new Date();const loc=(manualLoc()||DB.lastLoc||{}).label||'';
   const g=DB.groups[0],r=DB.routes[0];
@@ -885,8 +894,8 @@ function chatPrompt(final){const first=!C.hist.length;
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?'미연이 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 미연이 반응해.'}${final?' 이번 대사로 대화를 귀엽게 마무리해. choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. 선택지는 후배가 미연에게 하는 반말 대사, 각 18자 이내. 서로 결이 다르게: 다정한 말, 장난스러운 말, 미연을 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
-mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 기분 좋으면 "smile", 그 밖엔 "normal".
+[할 일] ${first?'미연이 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 미연이 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. 선택지는 후배가 미연에게 하는 반말 대사, 각 18자 이내. 서로 결이 다르게: 다정한 말, 미연을 놀리거나 장난치는 말, 미연을 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
+mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
 JSON 하나만 출력: {"line":"미연 대사","mood":"normal","choices":["..."],"end":false}`;}
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
@@ -897,13 +906,13 @@ const DEMO_CHAT=[
   {line:'헤헤, 아무튼 선배는 길 찾기 천재니까… 어, 근데 여기 어디지?',mood:'fluster',choices:['지도 앱 켜줄까?','천재 맞아?','같이 헤매도 재밌어']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
 async function chatAsk(final){
-  if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final?{...d,...DEMO_CHAT[3]}:{...d};}
+  if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};}
   const r=await gemini(chatPrompt(final),null,{tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   const v=chatParse(r.text);if(!v)throw new Error('대답을 못 알아들었어');return v;}
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
 async function startChat(){
   if(!DB.settings.key.trim()){say('앗, API 키가 없으면 선배가 말을 못 해…<div class="hint">설정에서 키를 넣어줘.</div>');return;}
-  charEl.classList.add('up');  // B안: rises 20% in 5 steps so the choices don't cover her
+  dlgWrap.classList.add('big');
   S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();
   chatThink('');await chatStep(false);}
 async function chatStep(final){const gen=C.gen;C.busy=true;
@@ -913,31 +922,34 @@ async function chatStep(final){const gen=C.gen;C.busy=true;
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
   C.hist.push({who:'m',text:v.line});
-  if(final||v.choices.length<2)v.end=true;
+  v.end=final||(v.end===true&&C.picks>=CHAT_MIN)||v.choices.length<2;
   if(v.end)v.choices=[];chatShow(v);}
 function chatMood(m){const img=$('#charImg');img.src=m==='blush'?'miyeon_blush.png':'miyeon.png';
-  if(m==='fluster'){charEl.classList.remove('fluster');void charEl.offsetWidth;charEl.classList.add('fluster');}}
+  if(m==='fluster'||m==='huff'){charEl.classList.remove('fluster','huff');void charEl.offsetWidth;charEl.classList.add(m);}}
 /* typewriter; tap the box to show the whole line at once */
 function chatShow(v,errHint){chatMood(v.mood);const text=v.line.trim();let i=0;
   dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');
   const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
     if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c)}</button>`).join('')+'</div>');
-      dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy)return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
+      dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
     else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
   C.finishTyping=done;
   C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);}
-function chatPick(t){C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(C.picks>=CHAT_MAX);}
+function chatPick(t){C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(chatShouldEnd(C.picks));}
 function chatTap(){if(C.typing){C.finishTyping();return;}if(C.ended)endChat();}
-function endChat(){C.gen++;C.ended=false;charEl.classList.remove('up');$('#charImg').src='miyeon.png';SFX.btn();sayIdle();}
+function leaveChat(){C.gen++;C.ended=false;C.busy=false;if(C.typing){clearInterval(C.typing);C.typing=null;}
+  $('#charImg').src='miyeon.png';charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
+function endChat(){leaveChat();SFX.btn();sayIdle();}
 
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
-function birdOk(){return S.mode==='idle'&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!recHold&&!rec&&!fading
+/* chatting counts as idle time too: the timer keeps running and she can drop by (landing above the big box) */
+function birdOk(){return (S.mode==='idle'||S.mode==='chat')&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!recHold&&!rec&&!fading
   &&!$('#overlayHost').children.length&&!charEl.classList.contains('pressed');}
 let birdT=null;
-function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{if(!window.BIRD)return;if(birdOk()){BIRD.visit();birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
+function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{if(!window.BIRD)return;if(birdOk()){BIRD.visit({high:S.mode==='chat'});birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
 birdLater(60000+Math.random()*60000);
 setInterval(()=>{if(window.BIRD&&BIRD.busy&&!birdOk())BIRD.scare();},250);
-document.addEventListener('pointerdown',()=>{if(window.BIRD&&BIRD.busy)BIRD.scare();},{capture:true});
+document.addEventListener('pointerdown',()=>{if(window.BIRD&&BIRD.busy&&S.mode!=='chat')BIRD.scare();},{capture:true});  // tapping choices doesn't startle her
 
 /* ---------- boot ---------- */
 document.addEventListener('gesturestart',e=>e.preventDefault());
