@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.2';
+const VERSION='2.0.4';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -41,6 +41,7 @@ function openExternal(appUrl,webUrl){
   window.location.href=appUrl;
   setTimeout(()=>{document.removeEventListener('visibilitychange',onHide);if(!left&&!document.hidden&&webUrl)window.open(webUrl,'_blank','noopener');},1500);}
 
+function openGoogle(url){openExternal('comgooglemapsurl://'+url.replace(/^https?:\/\//,''),url);}
 /* ---------- sound effects (Web Audio, ambient: follows silent switch, no now-playing) ---------- */
 let AC=null,SFXOUT=null;
 function audio(){try{if(!AC){if(navigator.audioSession)navigator.audioSession.type='ambient';AC=new(window.AudioContext||window.webkitAudioContext)();
@@ -196,7 +197,10 @@ function gotText(txt){
 
 /* ---------- location ---------- */
 let LOCERR='';
-function getLoc(force){return new Promise(res=>{LOCERR='';
+const MANUAL_MS=6*3600e3;
+function manualLoc(){const m=DB.manualLoc;return m&&Date.now()-m.at<MANUAL_MS?m:null;}
+function getLoc(force){if(!force&&manualLoc())return Promise.resolve(manualLoc());return gpsLoc(force);}
+function gpsLoc(force){return new Promise(res=>{LOCERR='';
   const cached=DB.lastLoc&&Date.now()-DB.lastLoc.at<(force?0:10*60e3)?DB.lastLoc:null;
   if(!navigator.geolocation){LOCERR='이 기기에서 위치를 쓸 수 없어요.';return res(cached);}
   navigator.geolocation.getCurrentPosition(p=>{const l={lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy||0),at:Date.now(),label:DB.lastLoc&&distM(DB.lastLoc,{lat:p.coords.latitude,lng:p.coords.longitude})<300?DB.lastLoc.label:''};
@@ -243,7 +247,8 @@ async function gemini(prompt,loc){
         return {text:(c.content?.parts||[]).map(p=>p.text||'').join(''),chunks:(c.groundingMetadata?.groundingChunks||[]).map(x=>x.maps).filter(Boolean)};}
       const t=await r.text();lastStatus=r.status;
       try{lastErr=JSON.parse(t).error?.message||t;}catch(e){lastErr=t;}
-      if(r.status===503||r.status===429||r.status===500){await sleep(1500);continue;}
+      if(r.status===429){throw new Error(/free|limit: ?0/i.test(lastErr)?'무료 API 키로는 구글맵 확인을 쓸 수 없어요. 구글 AI Studio에서 결제를 연결해야 해요.':'구글맵 확인 한도를 넘었어요. 잠시 후 다시 해주세요.');}
+      if(r.status===503||r.status===500){await sleep(1500);continue;}
       if(/API key not valid|API_KEY_INVALID/i.test(lastErr))throw new Error('API 키를 확인해주세요.');
       if(r.status===404)throw new Error('모델 이름을 확인해주세요: '+model);
       break; // try next request form
@@ -399,7 +404,7 @@ function openDetail(c){SFX.btn();const st=DB.settings.links;const d=distM(S.loc,
     ${btns.length?`<div class="btnrow">${btns.join('')}</div>`:''}</div><div class="closehint">바깥을 누르면 닫혀요</div>`;
   ov.addEventListener('click',e=>{if(e.target===ov||e.target.classList.contains('closehint'))ov.remove();});
   ov.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{SFX.btn();const l=b.dataset.l;
-    if(l==='g')window.open(gSearch(c),'_blank','noopener');
+    if(l==='g')openGoogle(gSearch(c));
     if(l==='k'){const k=kSearch(c);openExternal(k.app,k.web);}
     if(l==='y'){const y=ySearch(c);openExternal(y.app,y.web);}});
   $('#overlayHost').appendChild(ov);}
@@ -416,7 +421,8 @@ function legsOf(items){const pts=(S.loc?[{...S.loc,id:'here'}]:[]).concat(items)
 function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);let html='';let tw=0,tt=0;
   if(R.mode==='hist'){const e=R.entry;$('#routeTitle').textContent=`지난 동선 ${R.idx+1}/${DB.routes.length}`;
     const d=new Date(e.date);$('#routeMeta').textContent=`${d.getMonth()+1}월 ${d.getDate()}일${e.request?' · '+e.request:''}`;
-    $('#routeDots').innerHTML=DB.routes.map((_,i)=>`<i class="${i===R.idx?'on':''}"></i>`).join('');}
+    const n=DB.routes.length;$('#routeDots').innerHTML=`<b class="arw${R.idx>0?'':' off'}" data-d="-1">◀</b>`+DB.routes.map((_,i)=>`<i class="${i===R.idx?'on':''}"></i>`).join('')+`<b class="arw${R.idx<n-1?'':' off'}" data-d="1">▶</b>`;
+    $('#routeDots').querySelectorAll('.arw').forEach(a=>a.onclick=()=>{const d=+a.dataset.d;if(a.classList.contains('off'))return;pageHist(R.idx+d,d);});}
   else{$('#routeTitle').textContent='이동 순서';$('#routeMeta').textContent='카드를 끌어서 순서를 바꿀 수 있어요.';$('#routeDots').innerHTML='';}
   if(S.loc)html+=`<div class="rstart gbox"><i></i>현재 위치</div>`;
   R.items.forEach((c,i)=>{const lg=S.loc?legs[i]:(i>0?legs[i-1]:null);
@@ -432,7 +438,7 @@ function renderRoute(changed){const box=$('#rlist');const legs=legsOf(R.items);l
   if(useG)btns.push(`<button class="gbtn" id="goG">Google Map으로 ▶</button>`);
   if(useK){const n=R.items.length,k=Math.min(R.kIdx,n-1);btns.push(`<button class="gbtn" id="goK">카카오맵 ${n>1?(k+1)+'번':''} 찾기 ▶</button>`);}
   const g=$('#gbtns');g.innerHTML=btns.join('');
-  if($('#goG'))$('#goG').onclick=()=>{SFX.btn();window.open(gmapsUrl(),'_blank','noopener');if(R.mode==='new')setTimeout(finishRoute,600);};
+  if($('#goG'))$('#goG').onclick=()=>{SFX.btn();openGoogle(gmapsUrl());if(R.mode==='new')setTimeout(finishRoute,600);};
   if($('#goK'))$('#goK').onclick=()=>{SFX.btn();const k=Math.min(R.kIdx,R.items.length-1);const u=kSearch(R.items[k]);openExternal(u.app,u.web);
     R.kIdx=(k+1)%R.items.length;setTimeout(()=>renderRoute(new Set()),800);};}
 function gmapsUrl(){const it=R.items;if(!it.length)return'#';const dest=it[it.length-1],way=it.slice(0,-1);
@@ -457,15 +463,25 @@ function startDrag(e,el){e.preventDefault();e.stopPropagation();audio();const bo
     const h=el.getBoundingClientRect().height;el.style.transform=`translateY(${y-base-h/2}px)`;};
   const up=()=>{el.style.transform='';el.classList.remove('drag');el.onpointermove=el.onpointerup=el.onpointercancel=null;};
   el.onpointermove=move;el.onpointerup=el.onpointercancel=up;}
-/* history: swipe left/right between saved routes, pull down to leave */
-(function(){const box=$('#rlist');let s=null;
-  box.addEventListener('touchstart',e=>{if(R.mode!=='hist'||e.target.closest('.h'))return;s={x:e.touches[0].clientX,y:e.touches[0].clientY,top:box.scrollTop<=0};},{passive:true});
+/* history: drag left/right between saved routes (card follows finger), pull down to leave */
+(function(){const box=$('#rlist');let s=null,horiz=false;
+  box.addEventListener('touchstart',e=>{if(R.mode!=='hist'||e.target.closest('.h')||paging)return;s={x:e.touches[0].clientX,y:e.touches[0].clientY,top:box.scrollTop<=0,dx:0};horiz=false;box.style.transition='none';},{passive:true});
   box.addEventListener('touchmove',e=>{if(!s)return;const dx=e.touches[0].clientX-s.x,dy=e.touches[0].clientY-s.y;
-    if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)*1.5){const n=DB.routes.length;const ni=R.idx+(dx<0?1:-1);s=null;
-      if(ni<0||ni>=n){box.classList.remove('shake');void box.offsetWidth;box.classList.add('shake');return;}
-      SFX.swipe();showHist(ni);}
+    if(!horiz&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.3)horiz=true;
+    if(horiz){const ni=R.idx+(dx<0?1:-1),edge=ni<0||ni>=DB.routes.length;const x=edge?dx*0.22:dx*0.9;s.dx=dx;
+      box.style.transform=`translateX(${x}px) rotate(${x/90}deg)`;box.style.opacity=String(1-Math.min(Math.abs(x)/500,.45));}
     else if(dy>90&&s.top&&Math.abs(dy)>Math.abs(dx)){s=null;closeRoute();}},{passive:true});
-  box.addEventListener('touchend',()=>{s=null;},{passive:true});})();
+  box.addEventListener('touchend',()=>{if(!s)return;const dx=s.dx;s=null;if(!horiz)return;horiz=false;
+    const dir=dx<0?1:-1,ni=R.idx+dir;
+    if(Math.abs(dx)<60||ni<0||ni>=DB.routes.length){box.style.transition='transform .28s cubic-bezier(.3,1.6,.5,1),opacity .2s';box.style.transform='';box.style.opacity='';
+      if(Math.abs(dx)>=60){SFX.touch();toast(ni<0?'가장 최근 동선이에요':'더 지난 동선은 없어요',1300);}return;}
+    pageHist(ni,dir);},{passive:true});})();
+let paging=false;
+async function pageHist(ni,dir){if(paging||ni<0||ni>=DB.routes.length)return;paging=true;const box=$('#rlist');SFX.swipe();
+  box.style.transition='transform .17s ease-in,opacity .17s';box.style.transform=`translateX(${-dir*110}%) rotate(${-dir*4}deg)`;box.style.opacity='0';await sleep(170);
+  showHist(ni);box.scrollTop=0;box.style.transition='none';box.style.transform=`translateX(${dir*60}%)`;box.style.opacity='0';void box.offsetWidth;
+  box.style.transition='transform .22s cubic-bezier(.2,1.3,.5,1),opacity .18s';box.style.transform='';box.style.opacity='';
+  const t=$('#routeTitle');t.classList.remove('flash');void t.offsetWidth;t.classList.add('flash');await sleep(230);paging=false;}
 function showHist(i){R.mode='hist';R.idx=i;R.entry=DB.routes[i];R.items=R.entry.items;R.kIdx=0;renderRoute(new Set());}
 function toRouteHistory(){if(!DB.routes.length){toast('아직 저장된 동선이 없어요');return;}
   stepFade($('#room'),-1,()=>{$('#room').classList.add('hidden');$('#route').classList.remove('hidden');$('#route').classList.add('hist');
@@ -540,7 +556,8 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     <div class="small">모델 이름을 직접 입력해요. 기본: ${DEFAULT_MODEL}</div>
     <div class="sep"></div><div class="row" style="margin-top:0">현재 위치</div>
     <div class="locbox" id="sLoc">확인 중…</div>
-    <div class="minibtns"><button class="px" id="sLocRe">다시 받기</button><button class="px" id="sLocMap">구글맵에서 보기</button></div>
+    <div class="minibtns"><button class="px" id="sLocRe">GPS로 다시 받기</button><button class="px" id="sLocFix">지도에서 고치기</button></div>
+    <div class="minibtns"><button class="px" id="sLocMap">구글맵에서 보기</button><button class="px" id="sLocPaste">구글맵 좌표 붙여넣기</button></div>
     <div class="sep"></div><div class="row" style="margin-top:0">상세 창 링크 버튼</div>
     ${[['google','구글맵'],['youtube','유튜브'],['kakao','카카오맵 (한국에서만)']].map(([k,n])=>`<button class="chk ${L[k]?'on':'off'}" data-k="${k}"><i></i>${n}</button>`).join('')}
     <div class="sep"></div>
@@ -552,11 +569,22 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
   const showLoc=async(force)=>{locBox.innerHTML='확인 중…';const l=await getLoc(force);shown=l;
     if(!l){locBox.innerHTML=`<span class="err">${esc(LOCERR||'위치를 받지 못했어요.')}</span>`;return;}
     const age=Math.round((Date.now()-l.at)/60000);
-    locBox.innerHTML=`<b>${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}</b> <span style="color:var(--muted)">±${l.acc||'?'}m${age>0?` · ${age}분 전`:''}</span><div id="sLocName" style="color:var(--yel)">${esc(l.label||'')}</div>${LOCERR?`<div class="err">${esc(LOCERR)}</div>`:''}`;
-    if(!l.label){const name=await placeLabel(l);if(name){l.label=name;if(DB.lastLoc&&DB.lastLoc.at===l.at){DB.lastLoc.label=name;save();}const n=ov.querySelector('#sLocName');if(n)n.textContent=name;}}};
+    locBox.innerHTML=(l.manual?`<div style="color:var(--gold)">■ 직접 고친 위치 (6시간 동안 사용)</div>`:'')+`<b>${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}</b> <span style="color:var(--muted)">${l.manual?'':`±${l.acc||'?'}m`}${age>0?` · ${age}분 전`:''}</span><div id="sLocName" style="color:var(--yel)">${esc(l.label||'')}</div>${LOCERR?`<div class="err">${esc(LOCERR)}</div>`:''}`;
+    if(!l.label){const name=await placeLabel(l);if(name){l.label=name;if(DB.lastLoc&&DB.lastLoc.at===l.at){DB.lastLoc.label=name;save();}if(DB.manualLoc&&DB.manualLoc.at===l.at){DB.manualLoc.label=name;save();}const n=ov.querySelector('#sLocName');if(n)n.textContent=name;}}};
   showLoc(false);
-  ov.querySelector('#sLocRe').onclick=()=>{SFX.btn();showLoc(true);};
-  ov.querySelector('#sLocMap').onclick=()=>{SFX.btn();if(!shown){toast('먼저 위치를 받아주세요');return;}window.open(`https://www.google.com/maps/search/?api=1&query=${shown.lat},${shown.lng}`,'_blank','noopener');};
+  const setManual=(lat,lng)=>{DB.manualLoc={lat,lng,acc:0,at:Date.now(),manual:true,label:''};save();S.loc=DB.manualLoc;SFX.pin();showLoc(false);};
+  ov.querySelector('#sLocRe').onclick=()=>{SFX.btn();DB.manualLoc=null;save();showLoc(true);};
+  ov.querySelector('#sLocFix').onclick=()=>{SFX.btn();pickOnMap(shown,setManual);};
+  ov.querySelector('#sLocMap').onclick=()=>{SFX.btn();if(!shown){toast('먼저 위치를 받아주세요');return;}openGoogle(`https://www.google.com/maps/search/?api=1&query=${shown.lat},${shown.lng}`);};
+  ov.querySelector('#sLocPaste').onclick=async()=>{SFX.btn();let t='';try{t=await navigator.clipboard.readText();}catch(e){}
+    const ask=()=>{const box=document.createElement('div');box.className='overlay';box.innerHTML=`<div class="win px solid" style="max-width:380px;width:100%"><div class="row" style="margin-top:0">구글맵 좌표 붙여넣기</div>
+      <div class="small">구글맵에서 원하는 곳을 꾹 눌러 핀을 꽂으면 위에 37.5299, 126.9648 같은 좌표가 떠요. 그걸 눌러 복사한 뒤 아래 칸을 길게 눌러 붙여넣으세요.</div>
+      <div class="field"><input id="cpIn" placeholder="37.5299, 126.9648" autocomplete="off"></div>
+      <div class="btnrow"><button class="px gold" id="cpOk">이 위치로</button><button class="px" id="cpNo" style="color:var(--muted)">취소</button></div></div>`;
+      $('#overlayHost').appendChild(box);const i=box.querySelector('#cpIn');if(t)i.value=t;setTimeout(()=>i.focus(),50);
+      box.querySelector('#cpNo').onclick=()=>{SFX.btn();box.remove();};
+      box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어요. 37.5, 127.0 같은 숫자를 넣어주세요');return;}box.remove();setManual(p.lat,p.lng);};};
+    const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
   ov.querySelectorAll('.chk[data-k]').forEach(b=>b.onclick=()=>{SFX.touch();L[b.dataset.k]=!L[b.dataset.k];b.classList.toggle('on',L[b.dataset.k]);b.classList.toggle('off',!L[b.dataset.k]);});
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
   const keyIn=ov.querySelector('#sKey');
@@ -570,6 +598,23 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     DB.settings.links=L;DB.settings.music=music;save();if(music)music_on();else BGM.stop();close();};
   ov.querySelector('#sClose').onclick=()=>{SFX.btn();close();};}
 function music_on(){music();}
+
+function parseLatLng(t){const m=String(t||'').match(/(-?\d{1,2}\.\d{3,})\s*[,\s]\s*(-?\d{1,3}\.\d{3,})/);if(!m)return null;const lat=+m[1],lng=+m[2];
+  if(Math.abs(lat)>90||Math.abs(lng)>180)return null;return {lat,lng};}
+let leafletP=null;
+function loadLeaflet(){if(window.L&&window.L.map)return Promise.resolve();if(leafletP)return leafletP;
+  leafletP=new Promise((res,rej)=>{const c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);
+    const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';s.onload=res;s.onerror=()=>{leafletP=null;rej();};document.head.appendChild(s);});return leafletP;}
+async function pickOnMap(start,done){const ov=document.createElement('div');ov.className='overlay';ov.style.padding='0';
+  ov.innerHTML=`<div class="picker"><div id="pmap"></div><div class="cross"></div>
+    <div class="ptop px solid">지도를 움직여서 가운데 핀을 지금 있는 곳에 맞춰주세요.</div>
+    <div class="pbtm"><button class="px gold" id="pOk">이 위치로</button><button class="px" id="pNo">취소</button></div></div>`;
+  $('#overlayHost').appendChild(ov);ov.querySelector('#pNo').onclick=()=>{SFX.btn();ov.remove();};
+  try{await loadLeaflet();}catch(e){ov.remove();toast('지도를 불러오지 못했어요. 인터넷 연결을 확인해 주세요');return;}
+  const c=start||DB.lastLoc||{lat:37.5665,lng:126.9780};
+  const map=window.L.map(ov.querySelector('#pmap'),{zoomControl:false,attributionControl:true}).setView([c.lat,c.lng],start?17:12);
+  window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  ov.querySelector('#pOk').onclick=()=>{const p=map.getCenter();ov.remove();done(+p.lat.toFixed(6),+p.lng.toFixed(6));};}
 
 /* ---------- tutorial ---------- */
 const SITU=[

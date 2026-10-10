@@ -193,3 +193,21 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 #route.hist #rlist{bottom:calc(var(--sab) + 104px)}
 .gbtn small{font-size:12px;margin-left:6px}
 .ghost{position:absolute;inset:0;z-index:0}
+/* v2.0.4 */
+#route .dots{align-items:center}
+#route .dots .arw{font-size:15px;color:var(--g);padding:6px 12px;cursor:pointer}
+#route .dots .arw.off{opacity:.18}
+#route .dots i{transition:all .2s}
+#route .dots i.on{transform:scale(1.35)}
+#routeTitle.flash{animation:rflash .45s steps(3)}
+@keyframes rflash{0%{opacity:.2}50%{opacity:1}75%{opacity:.4}100%{opacity:1}}
+#rlist{will-change:transform}
+.picker{position:absolute;inset:0;background:#111}
+.picker #pmap{position:absolute;inset:0}
+.picker .cross{position:absolute;left:50%;top:50%;width:26px;height:38px;margin:-38px 0 0 -13px;z-index:500;pointer-events:none;
+  background:linear-gradient(var(--gold),var(--gold)) 50% 100%/4px 16px no-repeat,radial-gradient(circle at 50% 11px,var(--bdark) 4px,var(--gold) 5px,var(--gold) 11px,transparent 12px);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
+.picker .ptop{position:absolute;left:14px;right:14px;top:calc(var(--sat) + 14px);z-index:500;padding:10px 12px;font-size:13px;color:#fff}
+.picker .pbtm{position:absolute;left:14px;right:14px;bottom:calc(var(--sab) + 18px);z-index:500;display:flex;gap:10px}
+.picker .pbtm button{flex:1;height:48px;font-size:15px;font-weight:700;color:#fff}
+.picker .pbtm .gold{color:var(--bdark)}
+.picker .leaflet-control-attribution{font-size:9px}
