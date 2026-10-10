@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.1';
+const VERSION='2.0.2';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -231,26 +231,26 @@ ${profileText()}
 async function gemini(prompt,loc){
   const st=DB.settings;const model=(st.model||DEFAULT_MODEL).trim();
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(st.key.trim())}`;
-  const sets=[[{googleMaps:{}},{google_search:{}}],[{googleMaps:{}}]];
-  let lastErr='';
-  for(const tools of sets){
-    const body={contents:[{role:'user',parts:[{text:prompt}]}],tools};
-    if(loc)body.toolConfig={retrievalConfig:{latLng:{latitude:loc.lat,longitude:loc.lng},languageCode:'ko'}};
+  const ll=loc?{retrievalConfig:{latLng:{latitude:loc.lat,longitude:loc.lng}}}:null;
+  const sets=[{tools:[{googleMaps:{}},{googleSearch:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:null},{tools:[{google_maps:{}}],tc:null}];
+  let lastErr='',lastStatus=0;
+  for(const set of sets){
+    const body={contents:[{role:'user',parts:[{text:prompt}]}],tools:set.tools};
+    if(set.tc)body.toolConfig=set.tc;
     for(let attempt=0;attempt<2;attempt++){
       let r;try{r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}catch(e){lastErr='net';await sleep(1200);continue;}
       if(r.ok){const j=await r.json();const c=j.candidates?.[0]||{};
         return {text:(c.content?.parts||[]).map(p=>p.text||'').join(''),chunks:(c.groundingMetadata?.groundingChunks||[]).map(x=>x.maps).filter(Boolean)};}
-      const t=await r.text();lastErr=t;
+      const t=await r.text();lastStatus=r.status;
+      try{lastErr=JSON.parse(t).error?.message||t;}catch(e){lastErr=t;}
       if(r.status===503||r.status===429||r.status===500){await sleep(1500);continue;}
-      if(r.status===400&&/API key|API_KEY/i.test(t))throw new Error('API 키를 확인해주세요.');
-      if(r.status===400)break; // tool combo not supported → try next set
+      if(/API key not valid|API_KEY_INVALID/i.test(lastErr))throw new Error('API 키를 확인해주세요.');
       if(r.status===404)throw new Error('모델 이름을 확인해주세요: '+model);
-      if(r.status===403)throw new Error('API 키를 확인해주세요.');
-      throw new Error('잠시 후 다시 해주세요. ('+r.status+')');
+      break; // try next request form
     }
   }
   if(lastErr==='net')throw new Error('인터넷 연결을 확인해주세요.');
-  throw new Error(`이 모델(${model})은 구글맵 확인을 못 해요. 설정에서 모델을 바꿔주세요. 예) gemini-flash-latest`);
+  throw new Error(`구글맵 확인 요청이 거절됐어요. (${lastStatus}) 구글 메시지: ${String(lastErr).slice(0,180)}`);
 }
 const norm=s=>String(s||'').toLowerCase().normalize('NFKC').replace(/[\s·・\-_,.()（）\[\]【】'"`~!@#$%^&*+=:;/\\|<>?]/g,'');
 function matchChunk(card,chunks){const keys=[card.mapsTitle,card.name].map(norm).filter(k=>k.length>=2);
