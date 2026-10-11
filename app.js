@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.2.3';
+const VERSION='2.2.4';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1044,6 +1044,23 @@ const AFF_TASTE={
   miyeon:'잘 받아주는 장난, 허당을 귀엽게 감싸주는 말, 엉뚱한 말에 기뻐해. 놀려서 발끈하게 만들어도 결국 좋아해. 같은 칭찬이 반복되면 부끄러워서 도망가고 싶어 해(소폭 마이너스). 무시하거나 시큰둥하면 서운해.',
   sujeong:'담백한 말, 재치 있는 한마디, 진지하게 들어주는 태도를 좋아해. 아부나 과한 칭찬은 오히려 깎여. 쉽게 오르지 않아(점수를 짜게 줘).',
   mizuki:'관심, 자기만 봐주는 느낌, 한국어 실수를 귀엽게 받아주는 말을 좋아해. 다른 사람(특히 다른 여자) 얘기는 크게 깎여. 실수를 놀리면 발끈하지만 장난이 귀여우면 오를 수도 있어.'};
+/* her hidden mood of the day (one per heroine, re-rolled each local day) — it bends what she likes today */
+const MOODS={
+  good:'기분 좋은 날. 장난이나 놀림도 웃으며 받아주고(평소보다 +), 엉뚱한 말도 즐거워해. 너무 조심스럽고 딱딱한 말은 김빠져 해(소폭 -).',
+  touchy:'예민한 날. 놀림이나 장난은 평소보다 훨씬 거슬려(-), 툭 던지는 말도 서운해해. 조용히 챙겨주고 배려하는 말엔 크게 누그러져(+).',
+  bored:'심심한 날. 엉뚱하거나 신선한 말에 확 반응해(+). 무난한 맞장구나 뻔한 말엔 시큰둥해(0 또는 소폭 -).',
+  tired:'피곤한 날. 걱정해주거나 쉬자는 말이 제일 반가워(+). 텐션 높은 장난이나 질문 공세는 버거워해(-).'};
+const MOOD_TONE={good:'평소보다 말이 많고 잘 웃어',touchy:'말끝이 살짝 날카롭거나 짧아',bored:'하품하듯 늘어지거나 뭔가 재밌는 거 없나 두리번거려',tired:'말이 조금 느리고 기운이 없어'};
+function todayMood(k){const d=new Date(),day=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  if(!DB.moods||DB.moods.day!==day){const ks=Object.keys(MOODS);DB.moods={day,m:{}};Object.keys(HEROES).forEach(h=>DB.moods.m[h]=ks[Math.floor(Math.random()*ks.length)]);save();}
+  return DB.moods.m[k]||'good';}
+function moodRule(){const m=todayMood(DB.settings.hero||'miyeon');
+  return `[오늘 ${hn()}의 속기분 — 절대 직접 말하지 말 것(기분 이름·"오늘 예민해" 같은 말 금지). 말투에만 은근히 묻어나게: ${MOOD_TONE[m]}] ${MOODS[m]}`;}
+/* the same kind of answer over and over wears thin: 2 in a row → half, 3+ → it backfires */
+const KINDS=['tease','kind','agree','odd'];let PICKED=[];
+function streakAff(c){PICKED=[...PICKED,c.k||'?'].slice(-6);let n=0;for(let i=PICKED.length-1;i>=0&&PICKED[i]===PICKED[PICKED.length-1];i--)n++;
+  if(c.k==null||c.k==='?')return c.aff;
+  if(n>=3)return Math.min(c.aff,-0.15);if(n===2&&c.aff>0)return c.aff*0.5;return c.aff;}
 function nameRule(){const n=DB.user.name;return n?`후배 이름은 "${n}". 대화 중에 가끔(매번은 말고) 이름으로 불러. 부를 때는 "${voc()}"처럼.`:'후배 이름은 몰라. 부를 일이 있으면 "후배"라고만.';}
 const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','선배가 요즘 빠져 있는 것'];
 /* she can wrap up only after 3+ answers, then 10% chance each turn (avg ~12 answers), always by 30 */
@@ -1065,27 +1082,30 @@ ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
 ${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너편 건물 창문에서 런닝셔츠 차림의 아저씨가 몸을 쑥 내밀고 시끄럽다며 허공에 주먹을 몇 번 휘두르고 들어갔어. 이번 대사는 먼저 그 일에 ${hn()}의 성격대로 반응해(예: "우, 우리가 너무 시끄러웠나?" 같은 느낌 — 그대로 베끼지 말고 자기 말투로, 목소리를 낮추거나 웃음을 참는 등). 그다음 후배가 한 말에 이어서 대화를 계속해.
-`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
-[선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도.`}
+`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
+[선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
+[선택지 결] 각 선택지에 k로 결을 붙여: 놀리거나 장난치는 말 "tease", 다정하거나 챙겨주는 말 "kind", 맞장구·질문 "agree", 엉뚱한 말 "odd".`}
+${moodRule()}
 ${loveRule()}
 ${slipRule()}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
 JSON 하나만 출력(아래는 형식 예시일 뿐, 내용은 지금 대화에 맞게 새로 써. choices의 t에는 후배가 실제로 할 말을 넣어):
-{"line":"(${hn()}의 대사)","line2":"","mood":"normal","choices":[{"t":"다리 아프면 좀 쉬어요","aff":0.15,"trap":false},{"t":"선배, 지도 거꾸로 든 거 알아요?","aff":0.1,"trap":false},{"t":"아까 그 카페 사람 친절하던데요","aff":-0.25,"trap":true}],"end":false}`;}
+{"line":"(${hn()}의 대사)","line2":"","mood":"normal","choices":[{"t":"다리 아프면 좀 쉬어요","aff":0.15,"trap":false,"k":"kind"},{"t":"선배, 지도 거꾸로 든 거 알아요?","aff":0.1,"trap":false,"k":"tease"},{"t":"아까 그 카페 사람 친절하던데요","aff":-0.25,"trap":true,"k":"agree"}],"end":false}`;}
 const TOUCH_RE=/손\s*(을|이|좀)?\s*(잡|줘|내밀|주세|꼭)|잡아\s*줄|안아|업어|기대(도|요|세)|팔짱|어깨(를|에)\s*(빌|기대)|뽀뽀|키스|스킨십/;
 const PLACEHOLDER_RE=/^\(?\s*(선택지|choice|대답|답변|후배의?\s*말)\s*[-_ ]?\s*\d*\s*\)?$|^\.{2,}$/i;
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
-  v.choices=Array.isArray(v.choices)?v.choices.map(x=>{if(x&&typeof x==='object'){const t=String(x.t||x.text||x.label||x.choice||x.content||x.value||'').trim(),trap=!!x.trap;let a=Number.isFinite(+x.aff)?+x.aff:0;if(trap)a=Math.min(a,-0.2);return {t,aff:a,trap};}
+  v.choices=Array.isArray(v.choices)?v.choices.map(x=>{if(x&&typeof x==='object'){const t=String(x.t||x.text||x.label||x.choice||x.content||x.value||'').trim(),trap=!!x.trap;let a=Number.isFinite(+x.aff)?+x.aff:0;if(trap)a=Math.min(a,-0.2);const k=KINDS.includes(x.k)?x.k:null;return {t,aff:a,trap,k};}
       return {t:String(x).trim(),aff:0,trap:false};}).filter(c=>c.t&&!PLACEHOLDER_RE.test(c.t)&&!TOUCH_RE.test(c.t)).slice(0,4):[];
+  if(v.choices.length>1&&v.choices.every(c=>c.trap)){const b=v.choices.reduce((x,y)=>y.aff>x.aff?y:x);b.trap=false;b.aff=0.05;}   // always leave one safe answer
   return v;}catch(e){return null;}}
 const DEMO_CHAT=[
   {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배랑 다녀서 안 힘들었어요','그 암산… 검산해 봐도 돼요?','오늘… 사진 잘 나오겠네요. 아, 그냥요','다리에 바퀴 달고 싶어요']},
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['아, 아니 그게… 사진 얘기예요','뒤에 비둘기는 있어요','…네, 선배 말한 거예요']},
   {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['제가 지도 볼까요?','천재… 맞죠?','같이 헤매는 것도 괜찮아요']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
-async function chatAsk(final,bye){
+async function chatAsk(final,bye){C.traps=1+Math.floor(Math.random()*3);
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];const v=final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};v.choices=(v.choices||[]).map(t=>({t,aff:0,trap:false}));return v;}
   const r=await gemini(chatPrompt(final,bye),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   let v=chatParse(r.text);
@@ -1128,7 +1148,7 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
 const NOISY={n:0,at:0};
 function noisyTurn(){const pos=NOISY.n%10;if(pos===0)NOISY.at=Math.floor(Math.random()*10);NOISY.n++;
   return pos===NOISY.at&&isNightNow()&&window.NEIGHBOR&&!NEIGHBOR.busy;}
-function chatPick(c){const t=c.t;C.pendAff=c.aff;C.hist.push({who:'me',text:t});C.picks++;chatThink(t);
+function chatPick(c){const t=c.t;C.pendAff=streakAff(c);C.hist.push({who:'me',text:t});C.picks++;chatThink(t);
   const bye=C.leaveNext?'asked':Math.random()<1/30?'own':null;C.leaveNext=false;
   C.noisy=null;if(!bye&&noisyTurn())C.noisy=sleep(450).then(()=>NEIGHBOR.show());
   chatStep(bye?false:chatShouldEnd(C.picks),bye);}
