@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.4.1';
+const VERSION='2.4.2';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1424,7 +1424,13 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)dayNight(f
 
 /* ---------- boot ---------- */
 applyHero();dayNight(false);
-new MutationObserver(()=>mainEl.classList.toggle('chatting',dlgWrap.classList.contains('big'))).observe(dlgWrap,{attributes:true,attributeFilter:['class']});
+/* the heart and the hand ride on top of the dialog box (stacked on one vertical line) and follow it as it grows or shrinks */
+(function(){const aff=$('#aff'),sw=$('#swapBtn');let last='';
+  const tick=()=>{if(!mainEl.classList.contains('hidden')&&dlgWrap.offsetParent){
+      const t=Math.round(dlgWrap.getBoundingClientRect().top-mainEl.getBoundingClientRect().top),pot=sw.classList.contains('potion'),key=t+'|'+pot;
+      if(key!==last){last=key;aff.style.top=(t-66)+'px';aff.style.left='38px';Object.assign(sw.style,{top:(t-(pot?139:135))+'px',left:(pot?32:29)+'px',right:'auto'});}}
+    requestAnimationFrame(tick);};
+  tick();})();
 new MutationObserver(()=>{const on=!$('#cardLayer').classList.contains('hidden');['#aff','#swapBtn'].forEach(q=>{const a=$(q);if(a)a.classList.toggle('hidden',on);});}).observe($('#cardLayer'),{attributes:true,attributeFilter:['class']});
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
