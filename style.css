@@ -302,3 +302,7 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .simwin th,.simwin td{padding:3px 2px;text-align:right;border-bottom:1px solid rgba(255,255,255,.12)}
 .simwin th:first-child,.simwin td:first-child{text-align:left}
 .simwin th{color:var(--gold);font-weight:700}
+
+/* running total of every judged answer, small and gray next to the number */
+#aff .st{position:relative;height:14px;min-width:40px;overflow:hidden;align-self:center;font-size:11px;line-height:14px;color:#a9adb8;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+#aff .st b{position:absolute;left:0;top:0;font-weight:400;white-space:nowrap}

@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.7';
+const VERSION='2.3.8';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -119,6 +119,9 @@ const SFX={
   /* affection: a soft "뾱" (snaps up) / "뽁" (duller, drops) with a short tail */
   affUp(){pop(260,880,0.13,0.11,0.035);},
   affDown(){pop(620,190,0.16,0.16,0.045);},
+  /* running-total ticks: a two-hit metal "찰캉" going up, a coin bouncing to rest going down */
+  coinUp(){coinHit(1850,0,0.22,1,1);coinHit(2450,0.055,0.3,1,1);},
+  coinDown(){let t=0,g=0.16,v=0.3;for(let i=0;i<6;i++){coinHit(1500-i*40,t,v,0.5,0.5);t+=g;g*=0.62;v*=0.62;}},
   /* rebirth potion: a warm detuned pad that swells and rises, a wobbly "부웅~" glide, dreamy bells, a short echo */
   magic(){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const sr=a.sampleRate,n=Math.floor(sr*1.8),b=a.createBuffer(1,n,sr),o=b.getChannelData(0),T=Math.PI*2;
     const pad=[[130.8,.10],[196,.08],[261.6,.07],[329.6,.05],[392,.04]],ph=new Float64Array(pad.length*2);let gp=0;
@@ -133,6 +136,11 @@ const SFX={
     for(let i=0;i<n;i++)o[i]*=0.55;
     const src=a.createBufferSource();src.buffer=b;src.connect(SFXOUT);src.start();}
 };
+function coinHit(f0,t0,vol,bright,decay){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const s=a.currentTime+t0+0.01;
+  [[1,1,0.35],[2.76,0.6,0.22],[5.40,0.4*bright,0.12],[8.93,0.25*bright,0.07],[13.3,0.15*bright,0.04]].forEach(([r,amp,dec])=>{
+    const o=a.createOscillator(),g=a.createGain();o.type='sine';o.frequency.value=f0*r;const v=vol*amp*0.35,d=dec*decay;
+    g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(v,s+0.0015);g.gain.setTargetAtTime(0,s+0.0015,d);o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+d*6);});
+  noise(t0+0.01,0.004,vol*0.4*bright,'highpass',3000);}
 function pop(f0,f1,dur,vol,tau){if(MICOPEN||AWAY)return;const a=audio();if(!a)return;
   [[0,1],[0.029,0.32],[0.043,0.1],[0.067,0.033]].forEach(([dt,g])=>{const s=a.currentTime+dt;
     [[1,1],[2,0.25]].forEach(([h,hv])=>{const o=a.createOscillator(),gn=a.createGain();o.type='sine';
@@ -254,7 +262,18 @@ function affRoll(from,to,dur,delay){const n=$('#affN'),up=to>from,len=Math.max(S
     const k=seq.length-1;if(!k)continue;const a=up?0:-k*AFF_H,b=up?-k*AFF_H:0;st.style.transform=`translateY(${a}px)`;
     if(st.animate)st.animate([{transform:`translateY(${a}px)`},{transform:`translateY(${b}px)`}],{duration:dur+k*25,delay,easing:'cubic-bezier(.3,1.45,.55,1)',fill:'forwards'});}
   setTimeout(()=>affDraw(to),delay+dur+len*25+400);}
-function affShow(){const h=$('#affH');if(h&&!h.firstChild)h.innerHTML=AFF_SVG;affDraw(affOf().v);}
+function affShow(){const h=$('#affH');if(h&&!h.firstChild)h.innerHTML=AFF_SVG;affDraw(affOf().v);affStatDraw();}
+const fmtSum=x=>(x>=0?'+':'')+x.toFixed(1);
+function affStatDraw(){const e=$('#affS');if(e)e.innerHTML=`<b>${fmtSum(affOf().sum||0)}</b>`;}
+/* every judged answer adds to a running total: up = the new number rises from below (찰캉), down = it drops from above (통통통) */
+function affStat(x,quiet){const A=affOf(),from=A.sum||0,to=from+x;A.sum=to;save();const e=$('#affS');if(!e)return;
+  if(quiet||fmtSum(from)===fmtSum(to)){affStatDraw();return;}   // the heart is moving this turn: let it have the stage
+  const up=x>=0,old=e.querySelector('b'),nb=document.createElement('b');nb.textContent=fmtSum(to);e.appendChild(nb);
+  up?SFX.coinUp():SFX.coinDown();
+  if(!nb.animate){if(old)old.remove();return;}
+  const d=up?1:-1,ease='cubic-bezier(.3,1.4,.55,1)';
+  nb.animate([{transform:`translateY(${14*d}px)`,opacity:0},{transform:'translateY(0)',opacity:1}],{duration:420,easing:ease,fill:'both'});
+  if(old){const a=old.animate([{transform:'translateY(0)',opacity:1},{transform:`translateY(${-14*d}px)`,opacity:0}],{duration:300,easing:'ease-in',fill:'forwards'});a.onfinish=()=>old.remove();}}
 function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();
   if(to===0&&!DB.locked)setTimeout(()=>lockOut(),900);
   const h=$('#affH');if(!h||!h.animate){affDraw(to);return;}
@@ -270,7 +289,7 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
 const AFF_SCALE=2,AFF_UP=1.6,AFF_DOWN=1.6;   // rise : drop = 1 : 1
-function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;
+function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;affStat(x,Math.abs(A.acc)>=1);
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
   setTimeout(()=>affBump(d),450);}
