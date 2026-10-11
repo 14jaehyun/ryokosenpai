@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.4.3';
+const VERSION='2.4.4';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -500,15 +500,15 @@ async function post(url,body,ms){const ac=new AbortController();const to=setTime
 const USAGE_TAGS={card:'카드 추천',chat:'대화',voice:'음성',etc:'기타'};
 function logUsage(tag,u,grounded){if(!u)return;try{const U=DB.usage||(DB.usage={since:Date.now(),rows:{}});const k=USAGE_TAGS[tag]?tag:'etc';
   const r=U.rows[k]||(U.rows[k]={n:0,inp:0,think:0,out:0,maps:0});r.n++;r.inp+=(u.promptTokenCount||0)+(u.toolUsePromptTokenCount||0);
-  r.think+=u.thoughtsTokenCount||0;r.out+=u.candidatesTokenCount||0;if(grounded)r.maps++;save();}catch(e){}}
+  r.think+=u.thoughtsTokenCount||0;r.out+=u.candidatesTokenCount||0;r.cache=(r.cache||0)+(u.cachedContentTokenCount||0);if(grounded)r.maps++;save();}catch(e){}}
 /* won estimate from the user's own bill (3.5 flash-lite): output incl. thinking ≈ ₩3.4 / 1k, input ≈ ₩0.41 / 1k */
-const wonOf=r=>Math.round((r.think+r.out)*0.0034+r.inp*0.00041);
+const wonOf=r=>Math.round((r.think+r.out)*0.0034+(r.inp-(r.cache||0))*0.00041+(r.cache||0)*0.00041*0.25);   // cached input ≈ 1/4 price
 function usageHTML(){const U=DB.usage;const ks=U?Object.keys(USAGE_TAGS).filter(k=>U.rows[k]):[];
   if(!ks.length)return '<div class="small">아직 기록 없음</div>';
-  const f=n=>n.toLocaleString('ko-KR');let T={n:0,inp:0,think:0,out:0,maps:0};ks.forEach(k=>{for(const x in T)T[x]+=U.rows[k][x];});
-  const row=(name,r,b)=>`<tr${b?' style="color:var(--yel)"':''}><td>${name}</td><td>${f(r.n)}</td><td>${f(r.inp)}</td><td>${f(r.think)}</td><td>${f(r.out)}</td><td>₩${f(wonOf(r))}</td></tr>`;
+  const f=n=>n.toLocaleString('ko-KR');let T={n:0,inp:0,cache:0,think:0,out:0,maps:0};ks.forEach(k=>{for(const x in T)T[x]+=U.rows[k][x]||0;});
+  const row=(name,r,b)=>`<tr${b?' style="color:var(--yel)"':''}><td>${name}</td><td>${f(r.n)}</td><td>${f(r.inp)}</td><td>${f(r.cache||0)}</td><td>${f(r.out)}</td><td>₩${f(wonOf(r))}</td></tr>`;
   return `<div class="small" style="margin-bottom:6px">${new Date(U.since).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}부터 · 금액은 대략</div>
-  <table class="usage"><tr><th></th><th>호출</th><th>입력</th><th>생각</th><th>답</th><th>추정</th></tr>${ks.map(k=>row(USAGE_TAGS[k],U.rows[k])).join('')}${row('합계',T,true)}</table>`;}
+  <table class="usage"><tr><th></th><th>호출</th><th>입력</th><th>캐시</th><th>답</th><th>추정</th></tr>${ks.map(k=>row(USAGE_TAGS[k],U.rows[k])).join('')}${row('합계',T,true)}</table>`;}
 /* tools=false → plain call (no grounding, no Maps fee) */
 async function gemini(prompt,loc,opt={}){
   const st=DB.settings;const model=(st.model||DEFAULT_MODEL).trim();
@@ -1145,26 +1145,35 @@ function chatCtx(){const now=new Date();const loc=(manualLoc()||DB.lastLoc||{}).
   return [`현지 시각: ${now.toLocaleString('ko-KR',{weekday:'short',hour:'numeric',minute:'2-digit'})}`,
     loc?`지금 있는 곳: ${loc}`:'',g?`후배가 최근 앱에 한 요청: "${g.request}"`:'',
     r?`최근에 짠 동선: ${r.items.map(c=>c.name).join(', ')}`:''].filter(Boolean).join('\n');}
-function chatPrompt(final,bye){const first=!C.hist.length;
-  const log=C.hist.map(h=>(h.who==='m'?hn()+': ':'후배: ')+h.text).join('\n');
-  if(!DB.chat)DB.chat={recent:[]};
+/* chat prompt = a fixed part per heroine first (same bytes every call → Gemini's implicit cache can discount it)
+   + the part that changes every turn last (situation, recent talk, this turn's task, today's mood) */
+function chatStatic(){const k=DB.settings.hero||'miyeon';
   return `${heroPrompt()}
 ${nameRule()}
-[상황]
-${chatCtx()}
-${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
-[최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너편 건물 창문에서 런닝셔츠 차림의 아저씨가 몸을 쑥 내밀고 시끄럽다며 허공에 주먹을 몇 번 휘두르고 들어갔어. 이번 대사는 먼저 그 일에 ${hn()}의 성격대로 반응해(예: "우, 우리가 너무 시끄러웠나?" 같은 느낌 — 그대로 베끼지 말고 자기 말투로, 목소리를 낮추거나 웃음을 참는 등). 그다음 후배가 한 말에 이어서 대화를 계속해.
-`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어(참새·고양이·새·동물 얘기는 선택지에 절대 넣지 마). end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 이번 함정 유형(함정마다 하나씩, 이것만 써): ${C.trapKinds.join(' / ')}.${(DB.settings.hero||'miyeon')==='mizuki'?' 미즈키 선택지에는 다른 사람(친구·다른 여자·다른 선배 등) 얘기를 절대 넣지 마. 너무 뻔해.':''} 함정은 소재만 봐서는 티 나지 않게 하고, 함정이 아닌 선택지에도 비슷한 소재를 섞어도 돼. 함정도 위의 후배 말투 규칙은 지켜.
-[선택지 점수] (점수 폭은 캐릭터 상관없이 똑같이) 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
-[선택지 결] 각 선택지에 k로 결을 붙여: 놀리거나 장난치는 말 "tease", 다정하거나 챙겨주는 말 "kind", 맞장구·질문 "agree", 엉뚱한 말 "odd".`}
-${coldRule()}
-${moodRule()}
-${loveRule()}
-${slipRule()}
+[선택지를 만들 때 공통 규칙] 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 참새·고양이·새·동물 얘기는 선택지에 절대 넣지 마.${k==='mizuki'?' 미즈키 선택지에는 다른 사람(친구·다른 여자·다른 선배 등) 얘기를 절대 넣지 마. 너무 뻔해.':''}
+함정: 아래 [할 일]에서 정한 개수만큼, ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답을 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해. 함정은 소재만 봐서는 티 나지 않게 하고, 함정이 아닌 선택지에도 비슷한 소재를 섞어도 돼. 함정도 후배 말투 규칙은 지켜.
+[선택지 점수] (점수 폭은 캐릭터 상관없이 똑같이) 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[k]||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
+[선택지 결] 각 선택지에 k로 결을 붙여: 놀리거나 장난치는 말 "tease", 다정하거나 챙겨주는 말 "kind", 맞장구·질문 "agree", 엉뚱한 말 "odd".
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
 JSON 하나만 출력(아래는 형식 예시일 뿐, 내용은 지금 대화에 맞게 새로 써. choices의 t에는 후배가 실제로 할 말을 넣어):
 {"line":"(${hn()}의 대사)","line2":"","mood":"normal","choices":[{"t":"다리 아프면 좀 쉬어요","aff":0.15,"trap":false,"k":"kind"},{"t":"선배, 지도 거꾸로 든 거 알아요?","aff":0.1,"trap":false,"k":"tease"},{"t":"아까 그 카페 사람 친절하던데요","aff":-0.25,"trap":true,"k":"agree"}],"end":false}`;}
+const CHAT_KEEP=12;   // lines of the talk sent back each turn (≈ the last 6 exchanges)
+function chatPrompt(final,bye){const first=!C.hist.length;
+  const log=C.hist.slice(-CHAT_KEEP).map(h=>(h.who==='m'?hn()+': ':'후배: ')+h.text).join('\n');
+  if(!DB.chat)DB.chat={recent:[]};
+  return `${chatStatic()}
+
+======== 여기부터 이번 턴 ========
+[상황]
+${chatCtx()}
+${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
+[최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화${C.hist.length>CHAT_KEEP?' (앞부분 생략, 최근 것만)':''}]\n${log}`}
+${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너편 건물 창문에서 런닝셔츠 차림의 아저씨가 몸을 쑥 내밀고 시끄럽다며 허공에 주먹을 몇 번 휘두르고 들어갔어. 이번 대사는 먼저 그 일에 ${hn()}의 성격대로 반응해(예: "우, 우리가 너무 시끄러웠나?" 같은 느낌 — 그대로 베끼지 말고 자기 말투로, 목소리를 낮추거나 웃음을 참는 등). 그다음 후배가 한 말에 이어서 대화를 계속해.
+`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 ${C.traps>=3?'4':'3~4'}개 만들어(위의 공통 규칙대로). end는 false. 이번 함정은 ${C.traps}개, 유형은 함정마다 하나씩 이것만 써: ${C.trapKinds.join(' / ')}.`}
+${coldRule()}
+${moodRule()}
+${loveRule()}
+${slipRule()}`;}
 const TOUCH_RE=/손\s*(을|이|좀)?\s*(잡|줘|내밀|주세|꼭)|잡아\s*줄|안아|업어|기대(도|요|세)|팔짱|어깨(를|에)\s*(빌|기대)|뽀뽀|키스|스킨십/;
 const ANIMAL_RE=/참새|고양이|냥이|야옹|새가|새는|새를|새한테|비둘기|까치|까마귀|동물|강아지|멍멍/;
 const PLACEHOLDER_RE=/^\(?\s*(선택지|choice|대답|답변|후배의?\s*말)\s*[-_ ]?\s*\d*\s*\)?$|^\.{2,}$/i;
@@ -1185,6 +1194,7 @@ async function chatAsk(final,bye){C.traps=1+Math.floor(Math.random()*3);C.trapKi
   const r=await gemini(chatPrompt(final,bye),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   let v=chatParse(r.text);
   if(v&&!final&&!bye&&v.choices.length<2){const r2=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});const v2=chatParse(r2.text);if(v2&&v2.choices.length>=2)v=v2;}
+  if(!v){const r3=await gemini(chatPrompt(final,bye),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});v=chatParse(r3.text);}   // unreadable JSON: one more try
   if(!v)throw new Error('대답을 못 알아들었어');return v;}
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
 async function startChat(){
