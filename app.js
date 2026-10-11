@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.6';
+const VERSION='2.3.7';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1044,7 +1044,7 @@ const PROTAG=`[후배(사용자, 남자) 선택지 규칙 — 반드시 지켜]
 말투: 선배에게 편한 존댓말(~요, ~어요, ~죠?). 극존대(~습니다, ~십니까)나 반말은 쓰지 마.
 설레는 말은 절대 대놓고 하지 못해. 말끝을 흐리거나("…", "아, 그냥요"), 다른 핑계를 대면서 수줍게 돌려 말해.
 장난은 소심하게 살짝 찌르는 정도. 다정한 말은 배려하지만 쭈뼛쭈뼛해.
-좋은 예: "그 옷… 잘 어울리는 것 같아요", "선배, 지도 거꾸로 든 거 알아요?", "다리 아프면 좀 쉬어요. …저도 쉬고 싶었어요", "참새도 길 잃을 때 있을까요?"
+좋은 예: "그 옷… 잘 어울리는 것 같아요", "선배, 지도 거꾸로 든 거 알아요?", "다리 아프면 좀 쉬어요. …저도 쉬고 싶었어요", "선배, 오늘 운세 봤어요?"
 금지: 작업 멘트·느끼한 말("니 얼굴이 지도잖아" 같은 것), 직설적인 외모 칭찬("오늘따라 예쁘네"), 리드하거나 능글맞은 말투, 반말.
 특히 금지: 신체 접촉에 관한 말은 어떤 형태로도 쓰지 마(손 잡기·안기·업기·기대기·팔짱 등). 제안도, 질문도, 농담도 안 돼("손 잡아줄까요?", "제 손 잡으면 부끄러워요?" 같은 것). 선배가 부끄러워하는 걸 일부러 떠보거나 들이대는 말도 금지. 이 후배는 소심해서 그런 말을 꺼낼 엄두도 못 내.`;
 function heroPrompt(){const h=hero();return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${h.name}'이야. ${HERO_BASE}\n${h.trait}\n${PROTAG}`;}
@@ -1121,7 +1121,7 @@ ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
 ${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너편 건물 창문에서 런닝셔츠 차림의 아저씨가 몸을 쑥 내밀고 시끄럽다며 허공에 주먹을 몇 번 휘두르고 들어갔어. 이번 대사는 먼저 그 일에 ${hn()}의 성격대로 반응해(예: "우, 우리가 너무 시끄러웠나?" 같은 느낌 — 그대로 베끼지 말고 자기 말투로, 목소리를 낮추거나 웃음을 참는 등). 그다음 후배가 한 말에 이어서 대화를 계속해.
-`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 이번 함정 유형(함정마다 하나씩, 이것만 써): ${C.trapKinds.join(' / ')}.${(DB.settings.hero||'miyeon')==='mizuki'?' 미즈키 선택지에는 다른 사람(친구·다른 여자·다른 선배 등) 얘기를 절대 넣지 마. 너무 뻔해.':''} 함정은 소재만 봐서는 티 나지 않게 하고, 함정이 아닌 선택지에도 비슷한 소재를 섞어도 돼. 함정도 위의 후배 말투 규칙은 지켜.
+`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어(참새·고양이·새·동물 얘기는 선택지에 절대 넣지 마). end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 이번 함정 유형(함정마다 하나씩, 이것만 써): ${C.trapKinds.join(' / ')}.${(DB.settings.hero||'miyeon')==='mizuki'?' 미즈키 선택지에는 다른 사람(친구·다른 여자·다른 선배 등) 얘기를 절대 넣지 마. 너무 뻔해.':''} 함정은 소재만 봐서는 티 나지 않게 하고, 함정이 아닌 선택지에도 비슷한 소재를 섞어도 돼. 함정도 위의 후배 말투 규칙은 지켜.
 [선택지 점수] (점수 폭은 캐릭터 상관없이 똑같이) 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
 [선택지 결] 각 선택지에 k로 결을 붙여: 놀리거나 장난치는 말 "tease", 다정하거나 챙겨주는 말 "kind", 맞장구·질문 "agree", 엉뚱한 말 "odd".`}
 ${coldRule()}
@@ -1132,12 +1132,13 @@ mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드�
 JSON 하나만 출력(아래는 형식 예시일 뿐, 내용은 지금 대화에 맞게 새로 써. choices의 t에는 후배가 실제로 할 말을 넣어):
 {"line":"(${hn()}의 대사)","line2":"","mood":"normal","choices":[{"t":"다리 아프면 좀 쉬어요","aff":0.15,"trap":false,"k":"kind"},{"t":"선배, 지도 거꾸로 든 거 알아요?","aff":0.1,"trap":false,"k":"tease"},{"t":"아까 그 카페 사람 친절하던데요","aff":-0.25,"trap":true,"k":"agree"}],"end":false}`;}
 const TOUCH_RE=/손\s*(을|이|좀)?\s*(잡|줘|내밀|주세|꼭)|잡아\s*줄|안아|업어|기대(도|요|세)|팔짱|어깨(를|에)\s*(빌|기대)|뽀뽀|키스|스킨십/;
+const ANIMAL_RE=/참새|고양이|냥이|야옹|새가|새는|새를|새한테|비둘기|까치|까마귀|동물|강아지|멍멍/;
 const PLACEHOLDER_RE=/^\(?\s*(선택지|choice|대답|답변|후배의?\s*말)\s*[-_ ]?\s*\d*\s*\)?$|^\.{2,}$/i;
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
   v.choices=Array.isArray(v.choices)?v.choices.map(x=>{if(x&&typeof x==='object'){const t=String(x.t||x.text||x.label||x.choice||x.content||x.value||'').trim(),trap=!!x.trap;let a=Number.isFinite(+x.aff)?+x.aff:0;if(trap)a=Math.min(a,-0.2);const k=KINDS.includes(x.k)?x.k:null;return {t,aff:a,trap,k};}
-      return {t:String(x).trim(),aff:0,trap:false};}).filter(c=>c.t&&!PLACEHOLDER_RE.test(c.t)&&!TOUCH_RE.test(c.t)).slice(0,4):[];
+      return {t:String(x).trim(),aff:0,trap:false};}).filter(c=>c.t&&!PLACEHOLDER_RE.test(c.t)&&!TOUCH_RE.test(c.t)&&!ANIMAL_RE.test(c.t)).slice(0,4):[];
   if(v.choices.length>1&&v.choices.every(c=>c.trap)){const b=v.choices.reduce((x,y)=>y.aff>x.aff?y:x);b.trap=false;b.aff=0.05;}   // always leave one safe answer
   return v;}catch(e){return null;}}
 const DEMO_CHAT=[
