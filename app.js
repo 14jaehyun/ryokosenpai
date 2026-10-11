@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.0';
+const VERSION='2.1.1';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -228,7 +228,7 @@ const canRecord=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&
 const recMime=()=>{for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg'])try{if(MediaRecorder.isTypeSupported(m))return m;}catch(e){}return '';};
 let REC=null;   // {stream,mr,chunks,t0,ready,dead}
 /* before the mic opens: every sound off and the audio context suspended (sound while the mic is open is what locks iOS on the quiet route) */
-async function hushForMic(){MICOPEN=true;try{BGM.stop();}catch(e){}
+async function hushForMic(){MICOPEN=true;try{const as=navigator.audioSession;if(as)as.type='play-and-record';}catch(e){}try{BGM.stop();}catch(e){}
   try{if(SFXOUT&&AC)SFXOUT.gain.setValueAtTime(0,AC.currentTime);}catch(e){}
   try{if(AC&&AC.state==='running')await Promise.race([AC.suspend(),sleep(250)]);}catch(e){}}
 /* after the mic closes: nothing plays now; the next touch builds a fresh context on the normal speaker route */
@@ -239,12 +239,12 @@ function listen(){if(!canRecord)return false;
   const r={chunks:[],t0:0,ready:null,dead:false,err:''};REC=r;
   r.ready=(async()=>{await hushForMic();if(r.dead)return;
     try{r.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
-    catch(e){r.err=(e&&e.name==='NotAllowedError')?'deny':'fail';return;}
+    catch(e){r.err=(e&&e.name==='NotAllowedError')?'deny':'fail:'+((e&&e.name)||'');return;}
     if(r.dead){killRec(r);return;}
     const m=recMime();try{r.mr=new MediaRecorder(r.stream,m?{mimeType:m}:undefined);}catch(e){r.mr=new MediaRecorder(r.stream);}
     r.mime=(r.mr.mimeType||m||'audio/mp4').split(';')[0];
     r.mr.ondataavailable=e=>{if(e.data&&e.data.size)r.chunks.push(e.data);};
-    r.mr.start(250);r.t0=Date.now();})();
+    r.mr.start();r.t0=Date.now();})();
   say(listenHTML(),{cursor:false});return true;}
 function abortListen(){const was=!!REC||MICOPEN;if(REC){killRec(REC);REC=null;}if(was)afterMic();}
 /* finger up: stop and hand back {blob,mime,ms} or {err} */
@@ -253,8 +253,8 @@ async function stopListen(){const r=REC;REC=null;if(!r){afterMic();return {err:'
   if(r.err||!r.mr){killRec(r);afterMic();return {err:r.err||'fail'};}
   const ms=Date.now()-r.t0;
   const blob=await new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;res(new Blob(r.chunks,{type:r.mime}));};
-    r.mr.onstop=fin;try{r.mr.requestData&&r.mr.state==='recording'&&r.mr.requestData();}catch(e){}
-    try{r.mr.state!=='inactive'?r.mr.stop():fin();}catch(e){fin();}setTimeout(fin,1500);});
+    r.mr.onstop=()=>setTimeout(fin,30);
+    try{r.mr.state!=='inactive'?r.mr.stop():fin();}catch(e){fin();}setTimeout(fin,2500);});
   try{r.stream.getTracks().forEach(t=>t.stop());}catch(e){}
   afterMic();return {blob,mime:r.mime,ms};}
 const b64=blob=>new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]||'');fr.onerror=rej;fr.readAsDataURL(blob);});
@@ -277,14 +277,14 @@ async function hearClip(clip){
   let res;try{res=await ask(clip.mime);}catch(e){if(/mime|unsupported|400/i.test(e.message)&&clip.mime!=='audio/aac')res=await ask(clip.mime==='audio/mp4'?'audio/aac':'audio/ogg');else throw e;}
   let j={};try{j=JSON.parse(res.text.replace(/^```(?:json)?|```$/g,'').trim());}catch(e){const m=res.text.match(/\{[\s\S]*\}/);try{j=m?JSON.parse(m[0]):{};}catch(e2){}}
   return {text:String(j.text||'').trim(),intent:String(j.intent||'').trim()};}
-const MISHEARD='어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?';
+const MISHEARD=code=>'어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?'+(code?`<div class="hint">(${esc(code)})</div>`:'');
 async function handleClip(clip){
   if(clip.err==='deny'){S.mode='idle';say('마이크를 못 쓰게 돼 있어.<div class="hint">아이폰 설정 › Safari(또는 이 앱) › 마이크를 허용해줘.</div>');return;}
-  if(clip.err){S.mode='idle';say(MISHEARD);return;}
+  if(clip.err){S.mode='idle';say(MISHEARD('mic-'+clip.err));return;}
   if(!clip.blob||clip.blob.size<1200||clip.ms<350){S.mode='idle';say('너무 짧았어.<br>꾹 누른 채로 말하고, 다 말한 다음에 손을 떼줘.');return;}
   say('음… 잠깐만.',{cursor:false});
   let h;try{h=await hearClip(clip);}catch(e){S.mode='idle';say(esc(e.message||'못 알아들었어.'));return;}
-  if(!h.text||h.intent==='none'){S.mode='idle';say(MISHEARD);return;}
+  if(!h.text||h.intent==='none'){S.mode='idle';say(MISHEARD((h.intent||'empty')+' '+Math.round(clip.blob.size/1024)+'KB '+(clip.ms/1000).toFixed(1)+'s '+clip.mime));return;}
   gotText(h.text,h.intent);}
 function typedIntent(t){if(/(음악|배경음|bgm)/i.test(t)&&/(꺼|끄|멈|그만|조용)/.test(t))return 'music_off';if(/(음악|배경음|bgm)/i.test(t)&&/(켜|틀|다시)/.test(t))return 'music_on';
   if(/취향/.test(t)&&/(다시|새로|바꿀|정할)/.test(t))return 'retaste';if(/이름/.test(t)&&/(바꿔|바꿀|바꾸|다시|새로)/.test(t))return 'rename';return 'request';}
@@ -779,7 +779,7 @@ async function stepFade(fromEl,dir,swap){if(fading)return;fading=true;const f=$(
 $('#roomSet').onclick=e=>{e.stopPropagation();if(S.mode!=='room')return;SFX.btn();openSettings('',true);};
 function toRoom(){if(S.mode!=='idle')return;S.mode='room';roomTab='saved';roomPins=[];
   stepFade(mainEl,-1,()=>{mainEl.classList.add('hidden');$('#room').classList.remove('hidden');SCREEN='room';music();renderRoom();$('#roomList').scrollTop=0;});}
-function toMain(){stepFade($('#room'),1,()=>{$('#room').classList.add('hidden');mainEl.classList.remove('hidden');SCREEN='main';music();S.mode='idle';sayIdle();});}
+function toMain(){stepFade($('#room'),1,()=>{$('#room').classList.add('hidden');mainEl.classList.remove('hidden');SCREEN='main';music();S.mode='idle';showDlg(true);sayIdle();});}
 
 /* ---------- settings ---------- */
 async function placeLabel(l){if(!l)return '';
@@ -810,7 +810,7 @@ function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';cons
     <div class="minibtns"><button class="px" id="sReset" style="color:var(--muted)">초기화…</button></div>
     <div class="btnrow"><button class="px gold" id="sSave">저장</button><button class="px" id="sClose" style="color:var(--muted)">닫기</button></div>
     <div class="small" style="text-align:center;margin-top:12px">여행선배 v${VERSION}</div></div></div>`;
-  $('#overlayHost').appendChild(ov);showDlg(false);
+  $('#overlayHost').appendChild(ov);if(!fromRoom)showDlg(false);
   const locBox=ov.querySelector('#sLoc');let shown=null;
   const showLoc=async(force)=>{locBox.innerHTML='확인 중…';const l=await getLoc(force);shown=l;
     if(!l){locBox.innerHTML=`<span class="err">${esc(LOCERR||'위치를 못 받았어.')}</span>`;return;}
