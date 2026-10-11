@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.6';
+const VERSION='2.1.7';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -241,7 +241,7 @@ function affRoll(from,to,dur,delay){const n=$('#affN'),up=to>from,len=Math.max(S
     if(st.animate)st.animate([{transform:`translateY(${a}px)`},{transform:`translateY(${b}px)`}],{duration:dur+k*25,delay,easing:'cubic-bezier(.3,1.45,.55,1)',fill:'forwards'});}
   setTimeout(()=>affDraw(to),delay+dur+len*25+400);}
 function affShow(){const h=$('#affH');if(h&&!h.firstChild)h.innerHTML=AFF_SVG;affDraw(affOf().v);}
-function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();affBusyUntil=Date.now()+1500;
+function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();
   const h=$('#affH');if(!h||!h.animate){affDraw(to);return;}
   if(d>0){SFX.affUp();
     h.animate([{transform:'none'},{transform:'scale(1.25,.75)',offset:.14},{transform:'translateY(-22px) scale(.85,1.18)',offset:.42},{transform:'translateY(-24px) scale(.95,1.05)',offset:.55},
@@ -254,17 +254,11 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
-const AFF_SCALE=2,AFF_DOWN=2;   // 10 turns per move → 5; a drop counts twice a rise (raising her is the hard part)
-function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;A.acc=(A.acc||0)+x;
+const AFF_SCALE=2,AFF_DOWN=2,AFF_UP=1.6;   // 10 turns per move → 5; a drop counts twice a rise (raising her is the hard part)
+function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
   setTimeout(()=>affBump(d),450);}
-/* idle beat: every 15s the heart shrinks a little, then springs back past full size and settles */
-let affBusyUntil=0;
-function affBeat(){const h=$('#affH'),a=$('#aff');if(!h||!h.animate||document.hidden||!a||a.classList.contains('hidden')||SCREEN!=='main'||Date.now()<affBusyUntil)return;
-  h.animate([{transform:'none'},{transform:'scale(.84)',offset:.28,easing:'ease-in'},{transform:'scale(1.16)',offset:.55,easing:'ease-out'},
-    {transform:'scale(.95)',offset:.75},{transform:'scale(1.03)',offset:.88},{transform:'none'}],{duration:620,easing:'ease-in-out'});}
-setInterval(affBeat,15000);
 function applyHero(){const h=hero(),img=$('#charImg');affShow();img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
   const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;}
 
@@ -1075,7 +1069,7 @@ ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
 [할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
-[선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 플러스는 짜게: 정말 성격에 딱 맞는 하나만 +0.15~0.3, 무난하거나 착하기만 한 말은 0~+0.05.`}
+[선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도.`}
 ${loveRule()}
 ${slipRule()}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
