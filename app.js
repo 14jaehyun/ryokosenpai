@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.4.0';
+const VERSION='2.4.1';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -296,10 +296,10 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
 const AFF_SCALE=2,AFF_UP=1.6,AFF_DOWN=1.6;   // rise : drop = 1 : 1
 function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;
-  /* the heart moves each time the running total crosses a whole number (now and then ×2~3, for no reason at all) */
+  /* the heart moves each time the running total crosses a whole number */
+  if(Math.random()<0.15)x*=Math.random()<0.5?2:3;   // now and then a judgment counts double or triple, for no reason at all
   const from=A.sum||0,steps=Math.floor(from+x)-Math.floor(from);affStat(x,steps!==0);
-  if(!steps)return;let d=steps;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
-  setTimeout(()=>affBump(d),450);}
+  if(steps)setTimeout(()=>affBump(steps),450);}
 function applyHero(){const h=hero(),img=$('#charImg');affShow();img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
   const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;if(h.blink)new Image().src=h.blink;}
 
@@ -1424,6 +1424,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)dayNight(f
 
 /* ---------- boot ---------- */
 applyHero();dayNight(false);
+new MutationObserver(()=>mainEl.classList.toggle('chatting',dlgWrap.classList.contains('big'))).observe(dlgWrap,{attributes:true,attributeFilter:['class']});
 new MutationObserver(()=>{const on=!$('#cardLayer').classList.contains('hidden');['#aff','#swapBtn'].forEach(q=>{const a=$(q);if(a)a.classList.toggle('hidden',on);});}).observe($('#cardLayer'),{attributes:true,attributeFilter:['class']});
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});

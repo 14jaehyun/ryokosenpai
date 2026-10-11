@@ -306,3 +306,6 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 /* running total of every judged answer, small and gray next to the number */
 #aff .st{position:relative;height:14px;min-width:40px;overflow:hidden;align-self:center;font-size:11px;line-height:14px;color:#a9adb8;font-variant-numeric:tabular-nums;letter-spacing:.5px}
 #aff .st b{position:absolute;left:0;top:0;font-weight:400;white-space:nowrap}
+/* while chatting (big box) the heart and the hand sit just above the box, stacked on one vertical line */
+#main.chatting #aff{top:auto;left:32px;bottom:calc(5.9% + 262px)}
+#main.chatting #swapBtn{top:auto;right:auto;left:23px;bottom:calc(5.9% + 318px)}
