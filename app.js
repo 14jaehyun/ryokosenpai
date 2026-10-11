@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.8';
+const VERSION='2.1.9';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1073,13 +1073,15 @@ ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CH
 ${loveRule()}
 ${slipRule()}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
-JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":[{"t":"선택지","aff":0,"trap":false}],"end":false}`;}
+JSON 하나만 출력(아래는 형식 예시일 뿐, 내용은 지금 대화에 맞게 새로 써. choices의 t에는 후배가 실제로 할 말을 넣어):
+{"line":"(${hn()}의 대사)","line2":"","mood":"normal","choices":[{"t":"다리 아프면 좀 쉬어요","aff":0.15,"trap":false},{"t":"선배, 지도 거꾸로 든 거 알아요?","aff":0.1,"trap":false},{"t":"아까 그 카페 사람 친절하던데요","aff":-0.25,"trap":true}],"end":false}`;}
 const TOUCH_RE=/손\s*(을|이|좀)?\s*(잡|줘|내밀|주세|꼭)|잡아\s*줄|안아|업어|기대(도|요|세)|팔짱|어깨(를|에)\s*(빌|기대)|뽀뽀|키스|스킨십/;
+const PLACEHOLDER_RE=/^\(?\s*(선택지|choice|대답|답변|후배의?\s*말)\s*[-_ ]?\s*\d*\s*\)?$|^\.{2,}$/i;
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
-  v.choices=Array.isArray(v.choices)?v.choices.map(x=>{if(x&&typeof x==='object'){const t=String(x.t||x.text||'').trim(),trap=!!x.trap;let a=Number.isFinite(+x.aff)?+x.aff:0;if(trap)a=Math.min(a,-0.2);return {t,aff:a,trap};}
-      return {t:String(x).trim(),aff:0,trap:false};}).filter(c=>c.t&&!TOUCH_RE.test(c.t)).slice(0,4):[];
+  v.choices=Array.isArray(v.choices)?v.choices.map(x=>{if(x&&typeof x==='object'){const t=String(x.t||x.text||x.label||x.choice||x.content||x.value||'').trim(),trap=!!x.trap;let a=Number.isFinite(+x.aff)?+x.aff:0;if(trap)a=Math.min(a,-0.2);return {t,aff:a,trap};}
+      return {t:String(x).trim(),aff:0,trap:false};}).filter(c=>c.t&&!PLACEHOLDER_RE.test(c.t)&&!TOUCH_RE.test(c.t)).slice(0,4):[];
   return v;}catch(e){return null;}}
 const DEMO_CHAT=[
   {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배랑 다녀서 안 힘들었어요','그 암산… 검산해 봐도 돼요?','오늘… 사진 잘 나오겠네요. 아, 그냥요','다리에 바퀴 달고 싶어요']},
@@ -1089,7 +1091,9 @@ const DEMO_CHAT=[
 async function chatAsk(final){
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];const v=final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};v.choices=(v.choices||[]).map(t=>({t,aff:0,trap:false}));return v;}
   const r=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
-  const v=chatParse(r.text);if(!v)throw new Error('대답을 못 알아들었어');return v;}
+  let v=chatParse(r.text);
+  if(v&&!final&&v.choices.length<2){const r2=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});const v2=chatParse(r2.text);if(v2&&v2.choices.length>=2)v=v2;}
+  if(!v)throw new Error('대답을 못 알아들었어');return v;}
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
 async function startChat(){
   if(!DB.settings.key.trim()){say('앗, API 키가 없으면 선배가 말을 못 해…<div class="hint">설정에서 키를 넣어줘.</div>');return;}
