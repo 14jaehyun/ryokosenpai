@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.2';
+const VERSION='2.3.3';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -840,7 +840,7 @@ function renderRoom(){const L=$('#roomList');roomTab='saved';
     gestures(w,card,{onTap:()=>roomPin(c,card),onLong:()=>openDetail(c),onLeft:()=>{const g=DB.groups.find(x=>x.cards.includes(c));
       g.cards=g.cards.filter(x=>x!==c);if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
   L.insertAdjacentHTML('beforeend',`<div class="stest"><div class="note">호감도 테스트 · 지금 캐릭터(${esc(hn())}) 기준</div>
-    <div class="minibtns"><button class="px" data-aff="5">호감 5</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div></div>`);
+    <div class="minibtns"><button class="px" data-aff="4">호감 4</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div></div>`);
   L.querySelectorAll('[data-aff]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();const A=affOf(),t=b.dataset.aff;
     A.v=t==='+3'?A.v+3:+t;A.acc=0;save();affDraw(A.v);toast(`${hn()} 호감도 ${A.v}`+(A.v===0&&!DB.locked?' · 나가면 화내고 떠나':''));});
   updateRoomPins();}
@@ -1052,7 +1052,7 @@ function slipRule(){if((DB.settings.hero||'miyeon')!=='mizuki')return '';
 /* who lets their feelings show, and how often (the app rolls the dice each turn)
    him: almost never (1 in 150). her: never below 60; 60+ 1 in 50, 75+ 1 in 10, 90+ 1 in 2 */
 function loveRule(){const v=affOf().v,me=Math.random()<1/150;
-  const p=v>=82?1/2:v>=55?1/10:v>=28?1/50:0,her=Math.random()<p;
+  const p=v>=35?1/2:v>=28?1/10:v>=20?1/50:0,her=Math.random()<p;
   return [me?'[후배 선택지] 이번엔 선택지 중 딱 하나만, 후배가 선배를 좋아하는 마음이 아주 살짝 새어 나오는 말을 넣어(말끝 흐리며 바로 얼버무림).'
            :'[후배 선택지] 후배는 극도로 소심해서 선배를 좋아하는 티를 전혀 못 내. 설레는 말·칭찬으로 호감을 드러내는 선택지는 넣지 마.',
     her?`[${hn()}] 이번 대사에서는 후배에 대한 호감을 살짝 드러내(말하다 멈칫하거나, 무심코 진심이 새어 나왔다가 수습하는 정도).`
@@ -1077,7 +1077,7 @@ function todayMood(k){const d=new Date(),day=d.getFullYear()+'-'+(d.getMonth()+1
   if(!DB.moods||DB.moods.day!==day){const ks=Object.keys(MOODS);DB.moods={day,m:{}};Object.keys(HEROES).forEach(h=>DB.moods.m[h]=ks[Math.floor(Math.random()*ks.length)]);save();}
   return DB.moods.m[k]||'good';}
 function coldRule(k){k=k||DB.settings.hero||'miyeon';const v=(DB.aff&&DB.aff[k]||{v:AFF_START}).v,nm=HEROES[k].name;
-  const a=v<=5?`[지금 ${nm}의 마음] 후배에게 많이 실망해서 차가워졌어. 말이 짧고 퉁명스럽고 거리를 둬(성격대로). 그래도 대화는 이어가.`:'';
+  const a=v<=4?`[지금 ${nm}의 마음] 후배에게 많이 실망해서 차가워졌어. 말이 짧고 퉁명스럽고 거리를 둬(성격대로). 그래도 대화는 이어가.`:'';
   const b=(DB.talks||0)<=2?`[관계] 후배와는 막 알게 된 사이야. 아직 서로 잘 몰라서 처음 만난 사람처럼 살짝 어색하고 조심스럽게 대해.`:'';
   return [a,b].filter(Boolean).join('\n');}
 function moodRule(){const m=todayMood(DB.settings.hero||'miyeon');
