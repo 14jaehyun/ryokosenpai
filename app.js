@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.1';
+const VERSION='2.3.2';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -237,10 +237,10 @@ const iya=n=>n+(hasBatchim(n)?'이야':'야');   // 미연이야 / 미즈키야 
 const AFF_SVG=(()=>{const H=["..##.##..",".#######.","#########","#########",".#######.","..#####..","...###...","....#...."],HI=['2,1','1,2'];let r='';
   H.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==='#')r+=`<rect x="${x*4}" y="${y*4}" width="4" height="4" fill="${HI.includes(x+','+y)?'#ffd1e0':'#ff6f9c'}"/>`;}));
   return `<svg width="36" height="32" viewBox="0 0 36 32" shape-rendering="crispEdges">${r}</svg>`;})();
-const AFF_START=30;
+const AFF_START=10;
 function affOf(){DB.aff=DB.aff||{};
   if(!DB.affBase){Object.values(DB.aff).forEach(a=>{a.v=(a.v||0)+50;});DB.affBase=1;}   // older saves started at 0
-  if(DB.affBase<2){Object.values(DB.aff).forEach(a=>{a.v=AFF_START;a.acc=0;});DB.affBase=2;if(DB.user&&DB.user.name&&DB.talks==null)DB.talks=10;}   // v2.3: everyone starts over at 30
+  if(DB.affBase<3){Object.values(DB.aff).forEach(a=>{a.v=AFF_START;a.acc=0;});DB.affBase=3;if(DB.user&&DB.user.name&&DB.talks==null)DB.talks=10;}   // v2.3.2: everyone starts over at 10   // v2.3: everyone starts over at 30
   const k=DB.settings.hero||'miyeon';return DB.aff[k]||(DB.aff[k]={v:AFF_START,acc:0});}
 const AFF_H=22;
 function affDraw(v){const n=$('#affN');if(!n)return;n.innerHTML=String(v).split('').map(c=>`<span class="d"><span class="s"><i>${c}</i></span></span>`).join('');}
@@ -269,7 +269,7 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
-const AFF_SCALE=2,AFF_DOWN=1.6,AFF_UP=1.6;   // rises and drops weigh the same (traps are 1~3 per set now)
+const AFF_SCALE=2,AFF_UP=1.6,AFF_DOWN=1.6*1.1;   // rise : drop = 1 : 1.1
 function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
@@ -840,7 +840,7 @@ function renderRoom(){const L=$('#roomList');roomTab='saved';
     gestures(w,card,{onTap:()=>roomPin(c,card),onLong:()=>openDetail(c),onLeft:()=>{const g=DB.groups.find(x=>x.cards.includes(c));
       g.cards=g.cards.filter(x=>x!==c);if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
   L.insertAdjacentHTML('beforeend',`<div class="stest"><div class="note">호감도 테스트 · 지금 캐릭터(${esc(hn())}) 기준</div>
-    <div class="minibtns"><button class="px" data-aff="10">호감 10</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div></div>`);
+    <div class="minibtns"><button class="px" data-aff="5">호감 5</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div></div>`);
   L.querySelectorAll('[data-aff]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();const A=affOf(),t=b.dataset.aff;
     A.v=t==='+3'?A.v+3:+t;A.acc=0;save();affDraw(A.v);toast(`${hn()} 호감도 ${A.v}`+(A.v===0&&!DB.locked?' · 나가면 화내고 떠나':''));});
   updateRoomPins();}
@@ -1052,7 +1052,7 @@ function slipRule(){if((DB.settings.hero||'miyeon')!=='mizuki')return '';
 /* who lets their feelings show, and how often (the app rolls the dice each turn)
    him: almost never (1 in 150). her: never below 60; 60+ 1 in 50, 75+ 1 in 10, 90+ 1 in 2 */
 function loveRule(){const v=affOf().v,me=Math.random()<1/150;
-  const p=v>=86?1/2:v>=65?1/10:v>=44?1/50:0,her=Math.random()<p;
+  const p=v>=82?1/2:v>=55?1/10:v>=28?1/50:0,her=Math.random()<p;
   return [me?'[후배 선택지] 이번엔 선택지 중 딱 하나만, 후배가 선배를 좋아하는 마음이 아주 살짝 새어 나오는 말을 넣어(말끝 흐리며 바로 얼버무림).'
            :'[후배 선택지] 후배는 극도로 소심해서 선배를 좋아하는 티를 전혀 못 내. 설레는 말·칭찬으로 호감을 드러내는 선택지는 넣지 마.',
     her?`[${hn()}] 이번 대사에서는 후배에 대한 호감을 살짝 드러내(말하다 멈칫하거나, 무심코 진심이 새어 나왔다가 수습하는 정도).`
@@ -1077,7 +1077,7 @@ function todayMood(k){const d=new Date(),day=d.getFullYear()+'-'+(d.getMonth()+1
   if(!DB.moods||DB.moods.day!==day){const ks=Object.keys(MOODS);DB.moods={day,m:{}};Object.keys(HEROES).forEach(h=>DB.moods.m[h]=ks[Math.floor(Math.random()*ks.length)]);save();}
   return DB.moods.m[k]||'good';}
 function coldRule(k){k=k||DB.settings.hero||'miyeon';const v=(DB.aff&&DB.aff[k]||{v:AFF_START}).v,nm=HEROES[k].name;
-  const a=v<=10?`[지금 ${nm}의 마음] 후배에게 많이 실망해서 차가워졌어. 말이 짧고 퉁명스럽고 거리를 둬(성격대로). 그래도 대화는 이어가.`:'';
+  const a=v<=5?`[지금 ${nm}의 마음] 후배에게 많이 실망해서 차가워졌어. 말이 짧고 퉁명스럽고 거리를 둬(성격대로). 그래도 대화는 이어가.`:'';
   const b=(DB.talks||0)<=2?`[관계] 후배와는 막 알게 된 사이야. 아직 서로 잘 몰라서 처음 만난 사람처럼 살짝 어색하고 조심스럽게 대해.`:'';
   return [a,b].filter(Boolean).join('\n');}
 function moodRule(){const m=todayMood(DB.settings.hero||'miyeon');
@@ -1272,9 +1272,9 @@ function potionTap(){const i=$('#swapBtn i');SFX.magic();
     mainEl.appendChild(m);
     m.querySelectorAll('[data-r]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();if(b.dataset.r==='1')rebirth();else m.remove();});
     m.addEventListener('pointerdown',e=>e.stopPropagation());},350);}
-async function rebirth(){const f=$('#fader');f.style.background='#fff';for(const o of [.25,.5,.75,1]){f.style.opacity=o;await sleep(110);}
+async function rebirth(){const f=$('#fader');f.style.background='#fff';f.style.transition='opacity .9s ease-in';void f.offsetWidth;f.style.opacity=1;await sleep(950);
   const ks=Object.keys(HEROES);
-  Object.assign(DB,{user:{name:''},chat:{recent:[]},aff:{},affBase:2,moods:null,groups:[],passed:[],routes:[],locked:null,talks:0});
+  Object.assign(DB,{user:{name:''},chat:{recent:[]},aff:{},affBase:3,moods:null,passed:[],locked:null,talks:0,reborn:1});   // saved cards and past routes stay
   DB.settings.hero=ks[Math.floor(Math.random()*ks.length)];save();await sleep(300);location.reload();}
 
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
@@ -1322,7 +1322,7 @@ function openReset(){const ov=document.createElement('div');ov.className='overla
   ov.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{SFX.touch();const k=b.dataset.o;opt[k]=!opt[k];b.classList.toggle('on',opt[k]);b.classList.toggle('off',!opt[k]);});
   ov.querySelector('#rNo').onclick=()=>{SFX.btn();ov.remove();};
   ov.querySelector('#rOk').onclick=()=>{if(!opt.me&&!opt.box&&!opt.key){toast('지울 걸 하나 이상 골라줘');return;}SFX.btn();
-    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};DB.aff={};DB.affBase=1;affShow();}
+    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};DB.aff={};DB.affBase=3;DB.locked=null;DB.talks=0;DB.moods=null;affShow();}
     if(opt.box){DB.groups=[];DB.passed=[];DB.routes=[];}
     if(opt.key){DB.settings.key='';DB.settings.model=DEFAULT_MODEL;}
     save();location.reload();};}
@@ -1360,6 +1360,8 @@ document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input'))e.preventDefault();lastTouch=n;},{passive:false});
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('input'))e.preventDefault();});
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(DB.reborn){delete DB.reborn;save();const f=$('#fader');Object.assign(f.style,{background:'#fff',opacity:1,transition:'none'});
+  setTimeout(()=>{f.style.transition='opacity 1.6s ease-out';f.style.opacity=0;setTimeout(()=>{f.style.transition='';f.style.background='';},1700);},350);}
 if(DB.locked&&DB.settings.key.trim())applyLocked();
 else if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 '+iya(hn())+'.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
 else if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());
