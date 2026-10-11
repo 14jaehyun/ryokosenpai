@@ -271,3 +271,15 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .usage th{color:var(--muted);font-weight:400}
 .usage td:first-child,.usage th:first-child{text-align:left}
 .usage tr+tr td{border-top:1px solid rgba(160,170,204,.18)}
+
+/* affection heart (top-left, no label) */
+#aff{position:absolute;left:27px;top:calc(var(--sat) + 83px);z-index:5;display:flex;align-items:center;gap:8px;pointer-events:none;filter:brightness(.85);
+  font-weight:700;font-size:18px;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.55);height:32px}
+#aff.hidden{display:none}
+#aff .h{display:block;transform-origin:50% 100%;filter:drop-shadow(0 2px 0 rgba(0,0,0,.5))}
+#aff .h svg{display:block}
+#aff .n{display:flex;height:22px;overflow:hidden;font-variant-numeric:tabular-nums}
+#aff .d{display:block;width:.62em;height:22px;overflow:hidden}
+#aff .d i{display:block;font-style:normal;height:22px;line-height:22px;text-align:center}
+#aff .d .s{display:block;will-change:transform}
+.webfb{position:absolute;left:50%;bottom:calc(var(--sab) + 90px);transform:translateX(-50%);z-index:70;padding:8px 14px;font-size:12px;font-weight:700;white-space:nowrap;color:var(--dark)}

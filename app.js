@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.2';
+const VERSION='2.1.3';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -50,11 +50,19 @@ const searchText=c=>isKR(c)?[placeTitle(c),regionKR(c.address)].filter(Boolean).
 /* open another app without leaving a blank browser page behind */
 function openExternal(appUrl,webUrl){
   goSilent();setTimeout(()=>{if(!document.hidden)AWAY=false;},2500);  // no sound may be playing at the moment we hand over to Maps/YouTube (that's what locks the quiet volume)
-  if(!appUrl){window.open(webUrl,'_blank','noopener');return;}
-  let left=false;const onHide=()=>{if(document.hidden)left=true;};
-  document.addEventListener('visibilitychange',onHide);
+  if(!appUrl){window.open(webUrl,'_blank','noopener');return;}   // still inside the tap → no pop-up warning
+  /* left = the app took over (page hidden, lost focus, or the iOS "open in app?" sheet showed up).
+     We never open the web page on our own any more (Safari calls that a pop-up); if the app clearly didn't open,
+     offer a button — a real tap — instead. */
+  let left=false;const mark=()=>{left=true;};const onVis=()=>{if(document.hidden)left=true;};
+  document.addEventListener('visibilitychange',onVis);window.addEventListener('blur',mark);window.addEventListener('pagehide',mark);
   window.location.href=appUrl;
-  setTimeout(()=>{document.removeEventListener('visibilitychange',onHide);if(!left&&!document.hidden&&webUrl)window.open(webUrl,'_blank','noopener');},1500);}
+  setTimeout(()=>{document.removeEventListener('visibilitychange',onVis);window.removeEventListener('blur',mark);window.removeEventListener('pagehide',mark);
+    if(!left&&!document.hidden&&document.hasFocus()&&webUrl)webFallback(webUrl);},2500);}
+function webFallback(url){const old=$('#webFb');if(old)old.remove();
+  const b=document.createElement('button');b.id='webFb';b.className='px gold webfb';b.textContent='앱이 안 열렸어? 웹으로 열기';
+  b.onclick=e=>{e.stopPropagation();SFX.btn();b.remove();window.open(url,'_blank','noopener');};
+  $('#app').appendChild(b);setTimeout(()=>b.remove(),6000);}
 
 function openGoogle(url){openExternal('comgooglemapsurl://'+url.replace(/^https?:\/\//,''),url);}
 /* ---------- sound effects (Web Audio, ambient: follows silent switch, no now-playing) ---------- */
@@ -107,8 +115,18 @@ const SFX={
   trans(){osc('triangle',330,165,0,0.28,0.192,0.3);osc('triangle',165,262,0.40,0.32,0.168,0.34);},  // 120%
   swipe(){noise(0,0.18,0.364,'bandpass',1100,600,0.9,0.35);noise(0.05,0.12,0.156,'lowpass',700,300,0.5,0.3);},
   pin(){noise(0,0.012,0.3,'highpass',4000);osc('square',988,988,0.012,0.06,0.06,0.08);osc('square',1319,1319,0.072,0.2,0.06,0.22);},
-  btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);}
+  btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);},
+  /* affection: a soft "뾱" (snaps up) / "뽁" (duller, drops) with a short tail */
+  affUp(){pop(260,880,0.13,0.11,0.035);},
+  affDown(){pop(620,190,0.16,0.16,0.045);}
 };
+function pop(f0,f1,dur,vol,tau){if(MICOPEN||AWAY)return;const a=audio();if(!a)return;
+  [[0,1],[0.029,0.32],[0.043,0.1],[0.067,0.033]].forEach(([dt,g])=>{const s=a.currentTime+dt;
+    [[1,1],[2,0.25]].forEach(([h,hv])=>{const o=a.createOscillator(),gn=a.createGain();o.type='sine';
+      o.frequency.setValueAtTime(f0*h,s);o.frequency.setTargetAtTime(f1*h,s,tau);
+      gn.gain.setValueAtTime(0,s);gn.gain.linearRampToValueAtTime(vol*g*hv,s+0.002);gn.gain.setTargetAtTime(0,s+0.002,dur/4);
+      o.connect(gn).connect(SFXOUT);o.start(s);o.stop(s+dur+0.05);});});
+  noise(0,0.012,vol*0.5,'lowpass',2500,1500,0.7,0.05);}
 
 /* ---------- background music (8-bit loops, synthesized live) ---------- */
 const BGM=(()=>{
@@ -196,13 +214,48 @@ const HEROES={
   miyeon:{name:'미연',img:'miyeon.png',blush:'miyeon_blush.png',pos:{left:0,top:0,width:100},
     trait:'추가 속성: 천연계·모에. 순진하고 천연스러운 반응, 가끔 엉뚱한 연상으로 말이 튀어. 감정이 얼굴에 그대로 드러나.'},
   mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-8.681,top:10,width:116.054},
-    trait:'추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
+    trait:'출신: 일본에서 온 유학생. 한국말을 꽤 잘하고 평소엔 자연스러운 반말을 써. 일본 이야기나 일본과 한국의 차이를 가끔 자연스럽게 꺼내. 추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
   sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-9.194,top:10,width:118.566},
     trait:'추가 속성: 쿨뷰티. 말수가 적고 담담하고 간결해. 감정 표현을 아끼고 문장을 짧게 끊어. 그래서 가끔 허당이 드러나거나 수줍어할 때 반전 매력이 커.'}};
 function hero(){return HEROES[DB.settings.hero]||HEROES.miyeon;}
 const hn=()=>hero().name;
 const iya=n=>n+(hasBatchim(n)?'이야':'야');   // 미연이야 / 미즈키야 / 수정이야
-function applyHero(){const h=hero(),img=$('#charImg');img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
+/* ---------- affection (per heroine, kept until reset; shown top-left as a heart + number, no label) ---------- */
+const AFF_SVG=(()=>{const H=["..##.##..",".#######.","#########","#########",".#######.","..#####..","...###...","....#...."],HI=['2,1','1,2'];let r='';
+  H.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==='#')r+=`<rect x="${x*4}" y="${y*4}" width="4" height="4" fill="${HI.includes(x+','+y)?'#ffd1e0':'#ff6f9c'}"/>`;}));
+  return `<svg width="36" height="32" viewBox="0 0 36 32" shape-rendering="crispEdges">${r}</svg>`;})();
+function affOf(){DB.aff=DB.aff||{};const k=DB.settings.hero||'miyeon';return DB.aff[k]||(DB.aff[k]={v:0,acc:0});}
+const AFF_H=22;
+function affDraw(v){const n=$('#affN');if(!n)return;n.innerHTML=String(v).split('').map(c=>`<span class="d"><span class="s"><i>${c}</i></span></span>`).join('');}
+/* odometer: every digit rolls through the values it really passes */
+function affRoll(from,to,dur,delay){const n=$('#affN'),up=to>from,len=Math.max(String(from).length,String(to).length);
+  const vals=[];for(let v=from;up?v<=to:v>=to;v+=up?1:-1)vals.push(String(v).padStart(len,' '));
+  n.innerHTML='';
+  for(let p=0;p<len;p++){const seq=[];vals.forEach(x=>{const c=x[p];if(seq[seq.length-1]!==c)seq.push(c);});
+    const d=document.createElement('span');d.className='d';const st=document.createElement('span');st.className='s';
+    const list=up?seq:seq.slice().reverse();st.innerHTML=list.map(c=>`<i>${c===' '?'&nbsp;':c}</i>`).join('');d.appendChild(st);n.appendChild(d);
+    const k=seq.length-1;if(!k)continue;const a=up?0:-k*AFF_H,b=up?-k*AFF_H:0;st.style.transform=`translateY(${a}px)`;
+    if(st.animate)st.animate([{transform:`translateY(${a}px)`},{transform:`translateY(${b}px)`}],{duration:dur+k*25,delay,easing:'cubic-bezier(.3,1.45,.55,1)',fill:'forwards'});}
+  setTimeout(()=>affDraw(to),delay+dur+len*25+400);}
+function affShow(){const h=$('#affH');if(h&&!h.firstChild)h.innerHTML=AFF_SVG;affDraw(affOf().v);}
+function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();
+  const h=$('#affH');if(!h||!h.animate){affDraw(to);return;}
+  if(d>0){SFX.affUp();
+    h.animate([{transform:'none'},{transform:'scale(1.25,.75)',offset:.14},{transform:'translateY(-22px) scale(.85,1.18)',offset:.42},{transform:'translateY(-24px) scale(.95,1.05)',offset:.55},
+      {transform:'translateY(0) scale(1.18,.82)',offset:.8},{transform:'scale(.96,1.04)',offset:.9},{transform:'none'}],{duration:620,easing:'ease-in-out'});
+    affRoll(from,to,520,120);}
+  else{setTimeout(()=>SFX.affDown(),180);
+    h.animate([{transform:'none'},{transform:'translateY(-6px) scale(.95,1.05)',offset:.1},{transform:'translateY(16px) scale(1.25,.85)',offset:.28},{transform:'translateY(16px) scale(1.2,.88)',offset:.46},
+      {transform:'translateY(-10px) scale(.88,1.14)',offset:.7},{transform:'translateY(0) scale(1.06,.95)',offset:.87},{transform:'none'}],{duration:760,easing:'ease-in-out'});
+    h.querySelector('svg').animate([{filter:'none'},{filter:'none',offset:.22},{filter:'grayscale(1) brightness(.85)',offset:.3},{filter:'grayscale(1) brightness(.85)',offset:.5},{filter:'none',offset:.75},{filter:'none'}],{duration:760,easing:'ease-out'});
+    affRoll(from,to,520,200);}}
+/* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
+   (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
+function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0));A.acc=(A.acc||0)+x;
+  if(Math.abs(A.acc)<1){save();return;}
+  const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
+  setTimeout(()=>affBump(d),450);}
+function applyHero(){const h=hero(),img=$('#charImg');affShow();img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
   const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;}
 
 /* ---------- dialog ---------- */
@@ -969,6 +1022,15 @@ const PROTAG=`[후배(사용자, 남자) 선택지 규칙 — 반드시 지켜]
 좋은 예: "그 옷… 잘 어울리는 것 같아요", "선배, 지도 거꾸로 든 거 알아요?", "다리 아프면 좀 쉬어요. …저도 쉬고 싶었어요", "참새도 길 잃을 때 있을까요?"
 금지: 작업 멘트·느끼한 말("니 얼굴이 지도잖아" 같은 것), 직설적인 외모 칭찬("오늘따라 예쁘네"), 스킨십 제안("손 잡아줄까"), 리드하거나 능글맞은 말투, 반말.`;
 function heroPrompt(){const h=hero();return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${h.name}'이야. ${HERO_BASE}\n${h.trait}\n${PROTAG}`;}
+/* 미즈키's Korean slips: the app rolls the dice (≈1 line in 5) so they stay rare and random */
+function slipRule(){if((DB.settings.hero||'miyeon')!=='mizuki')return '';
+  return Math.random()<0.2?'[이번 대사 특별 지시] 한국어를 딱 한 군데만 살짝 틀려: 조사 실수(예: "선배를"→"선배가"), 일본어가 튀어나옴(예: "아노…", "에?", "스고이… 아니, 대박!"), 일본어 직역 표현(예: "배가 비었어") 중 하나. 틀린 걸 스스로 알아채고 얼굴 빨개지며 부끄러워해(이때 mood는 "blush"). 과장하지 말고 자연스럽게.'
+    :'[이번 대사] 한국어 실수 없이 자연스럽게 말해. 일본어 섞지 마.';}
+/* how each heroine takes the junior's last line — for the hidden affection judgment */
+const AFF_TASTE={
+  miyeon:'잘 받아주는 장난, 허당을 귀엽게 감싸주는 말, 엉뚱한 말에 기뻐해. 놀려서 발끈하게 만들어도 결국 좋아해. 같은 칭찬이 반복되면 부끄러워서 도망가고 싶어 해(소폭 마이너스). 무시하거나 시큰둥하면 서운해.',
+  sujeong:'담백한 말, 재치 있는 한마디, 진지하게 들어주는 태도를 좋아해. 아부나 과한 칭찬은 오히려 깎여. 쉽게 오르지 않아(점수를 짜게 줘).',
+  mizuki:'관심, 자기만 봐주는 느낌, 한국어 실수를 귀엽게 받아주는 말을 좋아해. 다른 사람(특히 다른 여자) 얘기는 크게 깎여. 실수를 놀리면 발끈하지만 장난이 귀여우면 오를 수도 있어.'};
 function nameRule(){const n=DB.user.name;return n?`후배 이름은 "${n}". 대화 중에 가끔(매번은 말고) 이름으로 불러. 부를 때는 "${voc()}"처럼.`:'후배 이름은 몰라. 부를 일이 있으면 "후배"라고만.';}
 const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','선배가 요즘 빠져 있는 것'];
 /* she can wrap up only after 3+ answers, then 10% chance each turn (avg ~12 answers), always by 30 */
@@ -990,12 +1052,15 @@ ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
 [할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정한 말, 선배를 살짝 놀리는 말, 수줍게 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
+${first?'':`[속마음 점수] 후배가 방금 한 말을 ${hn()}의 성격으로 받아들였을 때 속으로 느끼는 호감 변화를 -0.3~0.3 사이 숫자로 매겨 aff에 넣어. 뻔하게 착한 말이라고 무조건 플러스가 아니야. ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 대부분은 -0.1~0.15 근처, 정말 마음에 들거나 싫을 때만 ±0.3에 가깝게.`}
+${slipRule()}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
-JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":["..."],"end":false}`;}
+JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":["..."],"end":false${first?'':',"aff":0'}}`;}
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
-  v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];return v;}catch(e){return null;}}
+  v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];
+  v.aff=Number.isFinite(+v.aff)?+v.aff:null;return v;}catch(e){return null;}}
 const DEMO_CHAT=[
   {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배랑 다녀서 안 힘들었어요','그 암산… 검산해 봐도 돼요?','오늘… 사진 잘 나오겠네요. 아, 그냥요','다리에 바퀴 달고 싶어요']},
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['아, 아니 그게… 사진 얘기예요','뒤에 비둘기는 있어요','…네, 선배 말한 거예요']},
@@ -1018,6 +1083,7 @@ async function chatStep(final){const gen=C.gen;C.busy=true;
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
   C.hist.push({who:'m',text:v.line+(v.line2?' '+v.line2:'')});
+  if(C.picks>0&&v.aff!=null)affJudge(v.aff);
   v.end=final||v.choices.length<2;  // only we decide when it ends
   if(v.end)v.choices=[];chatShow(v);}
 function chatMood(m){const img=$('#charImg');img.src=m==='blush'?hero().blush:hero().img;
@@ -1079,7 +1145,7 @@ function openReset(){const ov=document.createElement('div');ov.className='overla
   ov.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{SFX.touch();const k=b.dataset.o;opt[k]=!opt[k];b.classList.toggle('on',opt[k]);b.classList.toggle('off',!opt[k]);});
   ov.querySelector('#rNo').onclick=()=>{SFX.btn();ov.remove();};
   ov.querySelector('#rOk').onclick=()=>{if(!opt.me&&!opt.box&&!opt.key){toast('지울 걸 하나 이상 골라줘');return;}SFX.btn();
-    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};}
+    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};DB.aff={};affShow();}
     if(opt.box){DB.groups=[];DB.passed=[];DB.routes=[];}
     if(opt.key){DB.settings.key='';DB.settings.model=DEFAULT_MODEL;}
     save();location.reload();};}
@@ -1111,6 +1177,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)dayNight(f
 
 /* ---------- boot ---------- */
 applyHero();dayNight(false);
+new MutationObserver(()=>{const a=$('#aff');if(a)a.classList.toggle('hidden',!$('#cardLayer').classList.contains('hidden'));}).observe($('#cardLayer'),{attributes:true,attributeFilter:['class']});
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input'))e.preventDefault();lastTouch=n;},{passive:false});
