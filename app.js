@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.9';
+const VERSION='2.2.0';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -872,8 +872,6 @@ function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';cons
     <div class="minibtns"><button class="px" id="sLocRe">GPS로 다시 받기</button><button class="px" id="sLocFix">지도에서 고치기</button></div>
     <div class="minibtns"><button class="px" id="sLocMap">구글맵에서 보기</button><button class="px" id="sLocPaste">구글맵 좌표 붙여넣기</button></div>
     <div class="sep"></div>
-    <div class="row" style="margin-top:0">함께 다닐 선배</div>
-    <div class="minibtns" id="sHero">${Object.entries(HEROES).map(([k,h])=>`<button class="px${k===heroSel?' gold':''}" data-h="${k}"${k===heroSel?' style="color:var(--dark)"':''}>${h.name}</button>`).join('')}</div>
     <div class="sep"></div>
     <button class="chk ${music?'on':'off'}" id="sMusic" style="margin-top:0"><i></i>배경음악</button>
     <div class="sep"></div>
@@ -907,8 +905,6 @@ function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';cons
     const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
   ov.querySelector('#sReset').onclick=()=>{SFX.btn();openReset();};
   ov.querySelector('#sUsageClr').onclick=()=>{SFX.btn();DB.usage={since:Date.now(),rows:{}};save();ov.querySelector('#sUsage').innerHTML=usageHTML();};
-  ov.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{SFX.touch();heroSel=b.dataset.h;
-    ov.querySelectorAll('[data-h]').forEach(x=>{const on=x.dataset.h===heroSel;x.classList.toggle('gold',on);x.style.color=on?'var(--dark)':'';});});
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
   const keyIn=ov.querySelector('#sKey');
   ov.querySelector('#sPaste').onclick=async()=>{SFX.btn();let t='';
@@ -918,7 +914,7 @@ function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';cons
   const close=()=>{ov.remove();if(fromRoom){S.mode=prevMode;return;}showDlg(true);if(!DB.settings.key.trim()){sayIdle();return;}
     if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());else if(!DB.profile.done)startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
-    if(heroSel!==DB.settings.hero){DB.settings.hero=heroSel;DB.chat={recent:[]};applyHero();}
+
     DB.settings.music=music;save();ambientSession();if(music)music_on();else BGM.stop();close();};
   ov.querySelector('#sClose').onclick=()=>{SFX.btn();close();};}
 function music_on(){music();}
@@ -1059,7 +1055,7 @@ function chatCtx(){const now=new Date();const loc=(manualLoc()||DB.lastLoc||{}).
   return [`현지 시각: ${now.toLocaleString('ko-KR',{weekday:'short',hour:'numeric',minute:'2-digit'})}`,
     loc?`지금 있는 곳: ${loc}`:'',g?`후배가 최근 앱에 한 요청: "${g.request}"`:'',
     r?`최근에 짠 동선: ${r.items.map(c=>c.name).join(', ')}`:''].filter(Boolean).join('\n');}
-function chatPrompt(final){const first=!C.hist.length;
+function chatPrompt(final,bye){const first=!C.hist.length;
   const log=C.hist.map(h=>(h.who==='m'?hn()+': ':'후배: ')+h.text).join('\n');
   if(!DB.chat)DB.chat={recent:[]};
   return `${heroPrompt()}
@@ -1068,7 +1064,7 @@ ${nameRule()}
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
+[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
 [선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도.`}
 ${loveRule()}
 ${slipRule()}
@@ -1088,11 +1084,11 @@ const DEMO_CHAT=[
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['아, 아니 그게… 사진 얘기예요','뒤에 비둘기는 있어요','…네, 선배 말한 거예요']},
   {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['제가 지도 볼까요?','천재… 맞죠?','같이 헤매는 것도 괜찮아요']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
-async function chatAsk(final){
+async function chatAsk(final,bye){
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];const v=final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};v.choices=(v.choices||[]).map(t=>({t,aff:0,trap:false}));return v;}
-  const r=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
+  const r=await gemini(chatPrompt(final,bye),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   let v=chatParse(r.text);
-  if(v&&!final&&v.choices.length<2){const r2=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});const v2=chatParse(r2.text);if(v2&&v2.choices.length>=2)v=v2;}
+  if(v&&!final&&!bye&&v.choices.length<2){const r2=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});const v2=chatParse(r2.text);if(v2&&v2.choices.length>=2)v=v2;}
   if(!v)throw new Error('대답을 못 알아들었어');return v;}
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
 async function startChat(){
@@ -1100,16 +1096,16 @@ async function startChat(){
   dlgWrap.classList.add('big');
   S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();
   chatThink('');await chatStep(false);}
-async function chatStep(final){const gen=C.gen;C.busy=true;
-  let v;try{v=await chatAsk(final);}
+async function chatStep(final,bye){const gen=C.gen;C.busy=true;
+  let v;try{v=await chatAsk(final||!!bye,bye);}
   catch(e){if(gen!==C.gen)return;C.busy=false;
     chatShow({line:'앗… 무슨 말 하려고 했는지 까먹었어. 헤헤.',mood:'fluster',choices:[],end:true},esc(e.message||''));return;}
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
   C.hist.push({who:'m',text:v.line+(v.line2?' '+v.line2:'')});
   if(C.pendAff!=null){affJudge(C.pendAff);C.pendAff=null;}
-  v.end=final||v.choices.length<2;  // only we decide when it ends
-  if(v.end)v.choices=[];chatShow(v);}
+  v.end=final||!!bye||v.choices.length<2;  // only we decide when it ends
+  if(v.end)v.choices=[];if(bye)v.bye=true;chatShow(v);}
 function chatMood(m){const img=$('#charImg');img.src=m==='blush'?hero().blush:hero().img;
   if(m==='fluster'||m==='huff'){charEl.classList.remove('fluster','huff');void charEl.offsetWidth;charEl.classList.add(m);}}
 /* typewriter; tap the box to show the whole line at once */
@@ -1120,19 +1116,60 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
       if(!last){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;pi++;typeOne();};return;}
       if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c.t)}</button>`).join('')+'</div>');
         dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
+      else if(v.bye){C.ended=false;const g=C.gen;setTimeout(()=>{if(C.gen!==g||S.mode!=='chat')return;leaveChat();swapHero();},readMs(parts.join(' ')));}
       else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
     C.finishTyping=done;
     C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);};
   typeOne();}
-function chatPick(c){const t=c.t;C.pendAff=c.aff;C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(chatShouldEnd(C.picks));}
+function chatPick(c){const t=c.t;C.pendAff=c.aff;C.hist.push({who:'me',text:t});C.picks++;chatThink(t);
+  const bye=C.leaveNext?'asked':Math.random()<1/30?'own':null;C.leaveNext=false;
+  chatStep(bye?false:chatShouldEnd(C.picks),bye);}
 function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.ended)endChat();}
-function leaveChat(){C.gen++;C.pendAff=null;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
+function leaveChat(){C.gen++;C.pendAff=null;C.leaveNext=false;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
   $('#charImg').src=hero().img;charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
 function endChat(){leaveChat();SFX.btn();sayIdle();}
 
+/* ---------- heroine swap (yellow hand, top right) ---------- */
+const readMs=t=>Math.max(1600,700+String(t||'').length*70);
+function byeTask(kind){return kind==='asked'
+  ?'후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. 방금 후배가 한 말에 짧게 반응하면서, '+hn()+'의 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).'
+  :hn()+'(이)가 갑자기 가봐야 할 일이 생각났어. 방금 후배가 한 말에 짧게 반응하면서, 성격대로 자연스럽게 작별 인사를 하고 떠나.';}
+const BYE_FALLBACK={miyeon:'앗, 나 가봐야 할 시간이다! 재밌게 다녀와, 또 봐!',sujeong:'그럼, 난 이만. 조심히 다녀.',mizuki:'…응, 알았어. 나중에 꼭 다시 불러줘야 해?'};
+const HI_FALLBACK={miyeon:'어? 나 불렀어? 헤헤, 마침 심심했는데 잘됐다.',sujeong:'왔어? …같이 걷자.',mizuki:'에헤, 나 찾았어? 오늘은 나랑 다니는 거지?'};
+function heroOnly(k){return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${HEROES[k].name}'이야. ${HERO_BASE}\n${HEROES[k].trait}`;}
+async function heroLine(k,task){const key=DB.settings.key.trim().toLowerCase();if(!key||key==='demo')return null;
+  const p=`${heroOnly(k)}\n${nameRule()}\n[상황]\n${chatCtx()}\n[할 일] ${task}\n한두 문장, 반말. JSON만: {"line":"대사","mood":"normal"}`;
+  try{const r=await gemini(p,null,{tag:'chat',tools:false,timeout:15000,config:{responseMimeType:'application/json',temperature:1.0}});
+    const a=r.text.indexOf('{'),b=r.text.lastIndexOf('}');const v=JSON.parse(r.text.slice(a,b+1));return v&&v.line?String(v.line).trim():null;}catch(e){return null;}}
+let SWAPPING=false;
+/* idle: she says goodbye herself, then the swap */
+async function byeFromIdle(){if(SWAPPING||S.mode!=='idle')return;S.mode='swap';
+  say('<span class="think"></span>',{cursor:false});
+  const cur=DB.settings.hero||'miyeon';
+  const line=(await heroLine(cur,'후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. '+HEROES[cur].name+'의 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).'))||BYE_FALLBACK[cur];
+  say(esc(line),{cursor:false});setTimeout(swapHero,readMs(line));}
+/* shrink toward the lower right (70%), gap, fade the next one in, then her hello */
+function swapHero(){if(SWAPPING)return;SWAPPING=true;S.mode='swap';
+  const cur=DB.settings.hero||'miyeon',others=Object.keys(HEROES).filter(k=>k!==cur),next=others[Math.floor(Math.random()*others.length)];
+  const hi=heroLine(next,HEROES[next].name+'(이)가 방금 후배와 만났어. 지금 시각과 장소에 어울리게, 성격대로 반갑게(혹은 성격대로) 인사해.');   // ask while she's leaving
+  const img=$('#charImg'),done=async()=>{const line=(await hi)||HI_FALLBACK[next];SWAPPING=false;S.mode='idle';say(esc(line));};
+  if(!img.animate){DB.settings.hero=next;save();DB.chat={recent:[]};applyHero();done();return;}
+  img.style.transformOrigin='70% 70%';
+  const out=img.animate([{transform:'scale(1)',opacity:1},{transform:'scale(0)',opacity:0}],{duration:1050,easing:'cubic-bezier(.5,0,.75,0)',fill:'forwards'});
+  out.onfinish=()=>{img.style.opacity='0';out.cancel();img.style.transformOrigin='';
+    DB.settings.hero=next;DB.chat={recent:[]};save();applyHero();say('<span class="think"></span>',{cursor:false});
+    setTimeout(()=>{img.style.opacity='';const fin=img.animate([{opacity:0},{opacity:1}],{duration:1250,easing:'ease-out',fill:'backwards'});fin.onfinish=done;},500);};}
+function waveHand(){const i=$('#swapBtn i');if(i&&i.animate)i.animate([{transform:'rotate(-20deg)'},{transform:'rotate(-38deg)',offset:.18},{transform:'rotate(-4deg)',offset:.42},{transform:'rotate(-32deg)',offset:.64},{transform:'rotate(-13deg)',offset:.84},{transform:'rotate(-20deg)'}],{duration:850,easing:'ease-in-out'});}
+$('#swapBtn').addEventListener('pointerdown',e=>e.stopPropagation());
+$('#swapBtn').onclick=e=>{e.stopPropagation();if(SWAPPING)return;
+  if(S.mode==='idle'){waveHand();SFX.btn();byeFromIdle();return;}
+  if(S.mode==='chat'){if(C.leaveNext)return;waveHand();SFX.btn();
+    if(C.ended){leaveChat();S.mode='idle';byeFromIdle();return;}   // the talk already ended — just say goodbye
+    C.leaveNext=true;}};   // her next answer (after your pick) will be the goodbye
+
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
 /* chatting counts as idle time too: the timer keeps running and she can drop by (landing above the big box) */
-function birdOk(){return (S.mode==='idle'||S.mode==='chat')&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!recHold&&!rec&&!fading
+function birdOk(){return (S.mode==='idle'||S.mode==='chat')&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!REC&&!fading
   &&!$('#overlayHost').children.length&&!charEl.classList.contains('pressed');}
 let birdT=null;
 function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{if(!window.BIRD)return;if(birdOk()){BIRD.visit({high:S.mode==='chat'});birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
@@ -1201,7 +1238,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)dayNight(f
 
 /* ---------- boot ---------- */
 applyHero();dayNight(false);
-new MutationObserver(()=>{const a=$('#aff');if(a)a.classList.toggle('hidden',!$('#cardLayer').classList.contains('hidden'));}).observe($('#cardLayer'),{attributes:true,attributeFilter:['class']});
+new MutationObserver(()=>{const on=!$('#cardLayer').classList.contains('hidden');['#aff','#swapBtn'].forEach(q=>{const a=$(q);if(a)a.classList.toggle('hidden',on);});}).observe($('#cardLayer'),{attributes:true,attributeFilter:['class']});
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input'))e.preventDefault();lastTouch=n;},{passive:false});

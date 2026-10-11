@@ -283,3 +283,8 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 #aff .d i{display:block;font-style:normal;height:22px;line-height:22px;text-align:center}
 #aff .d .s{display:block;will-change:transform}
 .webfb{position:absolute;left:50%;bottom:calc(var(--sab) + 90px);transform:translateX(-50%);z-index:70;padding:8px 14px;font-size:12px;font-weight:700;white-space:nowrap;color:var(--dark)}
+
+/* heroine swap: yellow hand, top right, tilted left */
+#swapBtn{position:absolute;right:24px;top:calc(var(--sat) + 79px);z-index:5;padding:0;margin:0;background:none;border:0;filter:brightness(.92) drop-shadow(0 2px 0 rgba(0,0,0,.45));cursor:pointer;-webkit-tap-highlight-color:transparent}
+#swapBtn.hidden{display:none}
+#swapBtn i{display:block;width:34px;height:38px;background:url(hand.png) 0 0/34px 38px no-repeat;image-rendering:pixelated;transform-origin:55% 95%;transform:rotate(-20deg)}
