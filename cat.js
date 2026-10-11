@@ -37,8 +37,24 @@ window.CAT=(()=>{
         c.style.transform=`translate(${x-22}px,${y-32}px) scale(${sc*face},${sc})`;
         if(k>=1)break;await new Promise(r=>requestAnimationFrame(r));}
       if(stop)break;}
-    c.style.opacity=0;busy=false;}
-  /* startled: it just vanishes into the dark */
-  function scare(){if(!busy)return;stop=true;if(el)el.style.opacity=0;}
+    if(!fleeing){c.style.opacity=0;busy=false;}}
+  /* startled: a hop straight up, then a dash off the nearest side of the screen */
+  let fleeing=false;
+  async function scare(){if(!busy||fleeing||!el)return;stop=true;fleeing=true;
+    await new Promise(r=>requestAnimationFrame(r));
+    const m=el.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+),\s*([-\d.]+)\)/);
+    if(!m){el.style.opacity=0;fleeing=false;busy=false;return;}
+    let x=+m[1],y=+m[2],sc=Math.abs(+m[4]);const W=document.querySelector('#main').clientWidth;
+    const dir=(x+22<W*0.3)?-1:(Math.random()<.5?-1:1);   // usually bolts out to the left, away from the heroine
+    el.style.opacity=1;
+    const t0=performance.now(),hop=260,run=420;
+    while(true){const t=performance.now()-t0;
+      if(t<hop){const k=t/hop;el.style.backgroundPosition=(-44*F.jump)+'px 0';
+        el.style.transform=`translate(${x}px,${y-Math.sin(k*Math.PI)*26*sc}px) scale(${sc*dir*(1+0.15*Math.sin(k*Math.PI))},${sc*(1+0.25*Math.sin(k*Math.PI))})`;}
+      else{const k=Math.min(1,(t-hop)/run),nx=x+dir*k*(W*0.9),s2=sc*(1+0.4*k);
+        el.style.backgroundPosition=(-44*F[RUN[Math.floor(t/55)%4]])+'px 0';
+        el.style.transform=`translate(${nx}px,${y+k*8}px) scale(${s2*dir},${s2})`;if(k>=1)break;}
+      await new Promise(r=>requestAnimationFrame(r));}
+    el.style.opacity=0;fleeing=false;busy=false;}
   return {visit,scare,get busy(){return busy;}};
 })();

@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.2.2';
+const VERSION='2.2.3';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1064,7 +1064,8 @@ ${nameRule()}
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
+${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너편 건물 창문에서 런닝셔츠 차림의 아저씨가 몸을 쑥 내밀고 시끄럽다며 허공에 주먹을 몇 번 휘두르고 들어갔어. 이번 대사는 먼저 그 일에 ${hn()}의 성격대로 반응해(예: "우, 우리가 너무 시끄러웠나?" 같은 느낌 — 그대로 베끼지 말고 자기 말투로, 목소리를 낮추거나 웃음을 참는 등). 그다음 후배가 한 말에 이어서 대화를 계속해.
+`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
 [선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도.`}
 ${loveRule()}
 ${slipRule()}
@@ -1094,12 +1095,13 @@ function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meTe
 async function startChat(){
   if(!DB.settings.key.trim()){say('앗, API 키가 없으면 선배가 말을 못 해…<div class="hint">설정에서 키를 넣어줘.</div>');return;}
   dlgWrap.classList.add('big');
-  S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();
+  S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();if(window.CAT)CAT.scare();
   chatThink('');await chatStep(false);}
 async function chatStep(final,bye){const gen=C.gen;C.busy=true;
   let v;try{v=await chatAsk(final||!!bye,bye);}
   catch(e){if(gen!==C.gen)return;C.busy=false;
     chatShow({line:'앗… 무슨 말 하려고 했는지 까먹었어. 헤헤.',mood:'fluster',choices:[],end:true},esc(e.message||''));return;}
+  if(C.noisy){const w=C.noisy;C.noisy=null;await w;}   // she reacts once he's back inside
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
   C.hist.push({who:'m',text:v.line+(v.line2?' '+v.line2:'')});
@@ -1122,13 +1124,18 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
     C.finishTyping=done;
     C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);};
   typeOne();}
+/* night: once in every 10 picks (at a random one) the neighbor leans out of his window and shakes a fist at us */
+const NOISY={n:0,at:0};
+function noisyTurn(){const pos=NOISY.n%10;if(pos===0)NOISY.at=Math.floor(Math.random()*10);NOISY.n++;
+  return pos===NOISY.at&&isNightNow()&&window.NEIGHBOR&&!NEIGHBOR.busy;}
 function chatPick(c){const t=c.t;C.pendAff=c.aff;C.hist.push({who:'me',text:t});C.picks++;chatThink(t);
   const bye=C.leaveNext?'asked':Math.random()<1/30?'own':null;C.leaveNext=false;
+  C.noisy=null;if(!bye&&noisyTurn())C.noisy=sleep(450).then(()=>NEIGHBOR.show());
   chatStep(bye?false:chatShouldEnd(C.picks),bye);}
 function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.byeReady){byeGo();return;}if(C.ended)endChat();}
 function byeGo(){SFX.btn();leaveChat();swapHero();}
 function chatByeNow(){C.leaveNext=false;chatThink('');chatStep(false,'now');}
-function leaveChat(){C.gen++;C.pendAff=null;C.leaveNext=false;C.byeNow=false;C.byeReady=false;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
+function leaveChat(){C.gen++;C.noisy=null;C.pendAff=null;C.leaveNext=false;C.byeNow=false;C.byeReady=false;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
   $('#charImg').src=hero().img;charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
 function endChat(){if(C.byeReady){byeGo();return;}leaveChat();SFX.btn();sayIdle();}
 
@@ -1189,15 +1196,15 @@ $('#swapBtn').onclick=e=>{e.stopPropagation();if(SWAPPING)return;
 function birdOk(){return (S.mode==='idle'||S.mode==='chat')&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!REC&&!fading
   &&!$('#overlayHost').children.length&&!charEl.classList.contains('pressed');}
 let birdT=null;
-/* day: the sparrow (also drops by during a chat); night: the cat (only when you're just looking at the street) */
+/* day: the sparrow, night: the cat — both also drop by during a chat */
 const isNightNow=()=>mainEl.classList.contains('night');
 function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{
-  if(isNightNow()){if(window.CAT&&birdOk()&&S.mode==='idle'){CAT.visit();birdLater(60000+Math.random()*60000);}else birdLater(20000);return;}
+  if(isNightNow()){if(window.CAT&&birdOk()){CAT.visit();birdLater(60000+Math.random()*60000);}else birdLater(20000);return;}
   if(!window.BIRD)return;if(birdOk()){BIRD.visit({high:S.mode==='chat'});birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
 birdLater(60000+Math.random()*60000);
 setInterval(()=>{if(window.BIRD&&BIRD.busy&&!birdOk())BIRD.scare();},250);
-setInterval(()=>{if(window.CAT&&CAT.busy&&(!birdOk()||S.mode!=='idle'))CAT.scare();},250);
-document.addEventListener('pointerdown',()=>{if(window.CAT&&CAT.busy)CAT.scare();},{capture:true});
+setInterval(()=>{if(window.CAT&&CAT.busy&&!birdOk())CAT.scare();},250);
+document.addEventListener('pointerdown',()=>{if(window.CAT&&CAT.busy&&S.mode!=='chat')CAT.scare();},{capture:true});  // like the sparrow: taps during a chat don't startle it
 document.addEventListener('pointerdown',()=>{if(window.BIRD&&BIRD.busy&&S.mode!=='chat')BIRD.scare();},{capture:true});  // tapping choices doesn't startle her
 
 /* ---------- your name (asked once; she calls you by it now and then) ---------- */
