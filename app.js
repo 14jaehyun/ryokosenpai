@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.26';
+const VERSION='2.1.0';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -221,30 +221,77 @@ function charTapped(x,y){const r=charEl.getBoundingClientRect();if(x<r.left+r.wi
     const img=$('#charImg');img.src=hero().blush;setTimeout(()=>{img.src=hero().img;blushing=false;},2000);}
   return true;}
 
-/* ---------- speech ---------- */
-const SRec=window.SpeechRecognition||window.webkitSpeechRecognition;
-let rec=null,heard='',recDone=null,recHold=false,recTries=0;
-/* after coming back from another app iOS often ends the first recognition session immediately
-   (mic still held by the old audio session) — while the finger is down, quietly start a fresh one */
-function startRec(){
-  const r=new SRec();rec=r;r.lang='ko-KR';r.interimResults=true;r.continuous=true;
-  r.onresult=e=>{if(rec!==r)return;let t='';for(const x of e.results)t+=x[0].transcript;heard=t.trim();say('듣고 있어…<div class="hint" style="color:var(--yel)">'+esc(heard)+'</div>',{cursor:false});};
-  r.onerror=e=>{if(rec!==r)return;if(e.error==='not-allowed'||e.error==='service-not-allowed'){recHold=false;rec=null;MICOPEN=false;acStale=true;BGM.duck(false);typeInput('마이크를 못 써서 글로 받을게.');}};
-  r.onend=()=>{r._ended=true;if(rec!==r)return;
-    if(recDone){const f=recDone;recDone=null;f();return;}
-    if(recHold&&!heard&&recTries<4){recTries++;setTimeout(()=>{if(recHold&&rec===r){try{startRec();}catch(e){}}},150);}};
-  r.start();}
-function listen(){if(!SRec)return false;heard='';recHold=true;recTries=0;audioKick();BGM.stop();MICOPEN=true;
-  if(rec){try{rec.abort();}catch(e){}rec=null;}
-  try{BGM.duck(true);startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}
-  catch(e){try{startRec();say('듣고 있어…<div class="hint">손을 떼면 끝나.</div>',{cursor:false});return true;}catch(e2){recHold=false;rec=null;MICOPEN=false;BGM.duck(false);return false;}}}
-function abortListen(){const was=!!rec||MICOPEN;MICOPEN=false;recHold=false;if(rec){const r=rec;rec=null;try{r.abort();}catch(e){}}if(recDone){const f=recDone;recDone=null;f();}BGM.duck(false);ambientSession();if(was)acStale=true;}
-function stopListen(){recHold=false;return new Promise(res=>{if(!rec){MICOPEN=false;acStale=true;BGM.duck(false);return res(heard);}let done=false;const fin=()=>{if(!done){done=true;rec=null;MICOPEN=false;BGM.duck(false);ambientSession();acStale=true;res(heard);}};  // next touch rebuilds the audio (mic leaves iOS on the quiet route)
-  if(rec._ended)return fin();recDone=fin;try{rec.stop();}catch(e){fin();}setTimeout(fin,1500);});}
+/* ---------- voice: record while held → Gemini listens (no iOS speech module) ---------- */
+const LFX=`<div class="lfx"><svg class='lfxs' width='42' height='22' viewBox='0 0 42 22' shape-rendering='crispEdges'><g class='f f0'><rect x='20' y='10' width='2' height='2'/></g><g class='f f1'><rect x='14' y='6' width='2' height='2'/><rect x='14' y='8' width='2' height='2'/><rect x='14' y='10' width='2' height='2'/><rect x='14' y='12' width='2' height='2'/><rect x='14' y='14' width='2' height='2'/><rect x='16' y='6' width='2' height='2'/><rect x='16' y='14' width='2' height='2'/><rect x='20' y='10' width='2' height='2'/><rect x='24' y='6' width='2' height='2'/><rect x='24' y='14' width='2' height='2'/><rect x='26' y='6' width='2' height='2'/><rect x='26' y='8' width='2' height='2'/><rect x='26' y='10' width='2' height='2'/><rect x='26' y='12' width='2' height='2'/><rect x='26' y='14' width='2' height='2'/></g><g class='f f2'><rect x='8' y='6' width='2' height='2'/><rect x='8' y='8' width='2' height='2'/><rect x='8' y='10' width='2' height='2'/><rect x='8' y='12' width='2' height='2'/><rect x='8' y='14' width='2' height='2'/><rect x='10' y='2' width='2' height='2'/><rect x='10' y='4' width='2' height='2'/><rect x='10' y='6' width='2' height='2'/><rect x='10' y='14' width='2' height='2'/><rect x='10' y='16' width='2' height='2'/><rect x='10' y='18' width='2' height='2'/><rect x='14' y='6' width='2' height='2'/><rect x='14' y='8' width='2' height='2'/><rect x='14' y='10' width='2' height='2'/><rect x='14' y='12' width='2' height='2'/><rect x='14' y='14' width='2' height='2'/><rect x='16' y='6' width='2' height='2'/><rect x='16' y='14' width='2' height='2'/><rect x='20' y='10' width='2' height='2'/><rect x='24' y='6' width='2' height='2'/><rect x='24' y='14' width='2' height='2'/><rect x='26' y='6' width='2' height='2'/><rect x='26' y='8' width='2' height='2'/><rect x='26' y='10' width='2' height='2'/><rect x='26' y='12' width='2' height='2'/><rect x='26' y='14' width='2' height='2'/><rect x='30' y='2' width='2' height='2'/><rect x='30' y='4' width='2' height='2'/><rect x='30' y='6' width='2' height='2'/><rect x='30' y='14' width='2' height='2'/><rect x='30' y='16' width='2' height='2'/><rect x='30' y='18' width='2' height='2'/><rect x='32' y='6' width='2' height='2'/><rect x='32' y='8' width='2' height='2'/><rect x='32' y='10' width='2' height='2'/><rect x='32' y='12' width='2' height='2'/><rect x='32' y='14' width='2' height='2'/></g><g class='f f3'><rect x='2' y='6' width='2' height='2'/><rect x='2' y='8' width='2' height='2'/><rect x='2' y='10' width='2' height='2'/><rect x='2' y='12' width='2' height='2'/><rect x='2' y='14' width='2' height='2'/><rect x='4' y='0' width='2' height='2'/><rect x='4' y='2' width='2' height='2'/><rect x='4' y='4' width='2' height='2'/><rect x='4' y='16' width='2' height='2'/><rect x='4' y='18' width='2' height='2'/><rect x='4' y='20' width='2' height='2'/><rect x='6' y='-2' width='2' height='2'/><rect x='6' y='0' width='2' height='2'/><rect x='6' y='20' width='2' height='2'/><rect x='6' y='22' width='2' height='2'/><rect x='8' y='6' width='2' height='2'/><rect x='8' y='8' width='2' height='2'/><rect x='8' y='10' width='2' height='2'/><rect x='8' y='12' width='2' height='2'/><rect x='8' y='14' width='2' height='2'/><rect x='10' y='2' width='2' height='2'/><rect x='10' y='4' width='2' height='2'/><rect x='10' y='6' width='2' height='2'/><rect x='10' y='14' width='2' height='2'/><rect x='10' y='16' width='2' height='2'/><rect x='10' y='18' width='2' height='2'/><rect x='14' y='6' width='2' height='2'/><rect x='14' y='8' width='2' height='2'/><rect x='14' y='10' width='2' height='2'/><rect x='14' y='12' width='2' height='2'/><rect x='14' y='14' width='2' height='2'/><rect x='16' y='6' width='2' height='2'/><rect x='16' y='14' width='2' height='2'/><rect x='20' y='10' width='2' height='2'/><rect x='24' y='6' width='2' height='2'/><rect x='24' y='14' width='2' height='2'/><rect x='26' y='6' width='2' height='2'/><rect x='26' y='8' width='2' height='2'/><rect x='26' y='10' width='2' height='2'/><rect x='26' y='12' width='2' height='2'/><rect x='26' y='14' width='2' height='2'/><rect x='30' y='2' width='2' height='2'/><rect x='30' y='4' width='2' height='2'/><rect x='30' y='6' width='2' height='2'/><rect x='30' y='14' width='2' height='2'/><rect x='30' y='16' width='2' height='2'/><rect x='30' y='18' width='2' height='2'/><rect x='32' y='6' width='2' height='2'/><rect x='32' y='8' width='2' height='2'/><rect x='32' y='10' width='2' height='2'/><rect x='32' y='12' width='2' height='2'/><rect x='32' y='14' width='2' height='2'/><rect x='34' y='-2' width='2' height='2'/><rect x='34' y='0' width='2' height='2'/><rect x='34' y='20' width='2' height='2'/><rect x='34' y='22' width='2' height='2'/><rect x='36' y='0' width='2' height='2'/><rect x='36' y='2' width='2' height='2'/><rect x='36' y='4' width='2' height='2'/><rect x='36' y='16' width='2' height='2'/><rect x='36' y='18' width='2' height='2'/><rect x='36' y='20' width='2' height='2'/><rect x='38' y='6' width='2' height='2'/><rect x='38' y='8' width='2' height='2'/><rect x='38' y='10' width='2' height='2'/><rect x='38' y='12' width='2' height='2'/><rect x='38' y='14' width='2' height='2'/></g><g class='f f4'><rect x='8' y='6' width='2' height='2'/><rect x='8' y='8' width='2' height='2'/><rect x='8' y='10' width='2' height='2'/><rect x='8' y='12' width='2' height='2'/><rect x='8' y='14' width='2' height='2'/><rect x='10' y='2' width='2' height='2'/><rect x='10' y='4' width='2' height='2'/><rect x='10' y='6' width='2' height='2'/><rect x='10' y='14' width='2' height='2'/><rect x='10' y='16' width='2' height='2'/><rect x='10' y='18' width='2' height='2'/><rect x='14' y='6' width='2' height='2'/><rect x='14' y='8' width='2' height='2'/><rect x='14' y='10' width='2' height='2'/><rect x='14' y='12' width='2' height='2'/><rect x='14' y='14' width='2' height='2'/><rect x='16' y='6' width='2' height='2'/><rect x='16' y='14' width='2' height='2'/><rect x='20' y='10' width='2' height='2'/><rect x='24' y='6' width='2' height='2'/><rect x='24' y='14' width='2' height='2'/><rect x='26' y='6' width='2' height='2'/><rect x='26' y='8' width='2' height='2'/><rect x='26' y='10' width='2' height='2'/><rect x='26' y='12' width='2' height='2'/><rect x='26' y='14' width='2' height='2'/><rect x='30' y='2' width='2' height='2'/><rect x='30' y='4' width='2' height='2'/><rect x='30' y='6' width='2' height='2'/><rect x='30' y='14' width='2' height='2'/><rect x='30' y='16' width='2' height='2'/><rect x='30' y='18' width='2' height='2'/><rect x='32' y='6' width='2' height='2'/><rect x='32' y='8' width='2' height='2'/><rect x='32' y='10' width='2' height='2'/><rect x='32' y='12' width='2' height='2'/><rect x='32' y='14' width='2' height='2'/></g></svg></div>`;
+const listenHTML=(t)=>(t||'듣고 있어…')+LFX;
+const canRecord=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
+const recMime=()=>{for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg'])try{if(MediaRecorder.isTypeSupported(m))return m;}catch(e){}return '';};
+let REC=null;   // {stream,mr,chunks,t0,ready,dead}
+/* before the mic opens: every sound off and the audio context suspended (sound while the mic is open is what locks iOS on the quiet route) */
+async function hushForMic(){MICOPEN=true;try{BGM.stop();}catch(e){}
+  try{if(SFXOUT&&AC)SFXOUT.gain.setValueAtTime(0,AC.currentTime);}catch(e){}
+  try{if(AC&&AC.state==='running')await Promise.race([AC.suspend(),sleep(250)]);}catch(e){}}
+/* after the mic closes: nothing plays now; the next touch builds a fresh context on the normal speaker route */
+function afterMic(){MICOPEN=false;acStale=true;ambientSession();}
+function killRec(r){if(!r)return;r.dead=true;try{if(r.mr&&r.mr.state!=='inactive')r.mr.stop();}catch(e){}try{r.stream&&r.stream.getTracks().forEach(t=>t.stop());}catch(e){}}
+function listen(){if(!canRecord)return false;
+  if(REC){killRec(REC);REC=null;}
+  const r={chunks:[],t0:0,ready:null,dead:false,err:''};REC=r;
+  r.ready=(async()=>{await hushForMic();if(r.dead)return;
+    try{r.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
+    catch(e){r.err=(e&&e.name==='NotAllowedError')?'deny':'fail';return;}
+    if(r.dead){killRec(r);return;}
+    const m=recMime();try{r.mr=new MediaRecorder(r.stream,m?{mimeType:m}:undefined);}catch(e){r.mr=new MediaRecorder(r.stream);}
+    r.mime=(r.mr.mimeType||m||'audio/mp4').split(';')[0];
+    r.mr.ondataavailable=e=>{if(e.data&&e.data.size)r.chunks.push(e.data);};
+    r.mr.start(250);r.t0=Date.now();})();
+  say(listenHTML(),{cursor:false});return true;}
+function abortListen(){const was=!!REC||MICOPEN;if(REC){killRec(REC);REC=null;}if(was)afterMic();}
+/* finger up: stop and hand back {blob,mime,ms} or {err} */
+async function stopListen(){const r=REC;REC=null;if(!r){afterMic();return {err:'none'};}
+  await Promise.race([r.ready,sleep(4000)]);
+  if(r.err||!r.mr){killRec(r);afterMic();return {err:r.err||'fail'};}
+  const ms=Date.now()-r.t0;
+  const blob=await new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;res(new Blob(r.chunks,{type:r.mime}));};
+    r.mr.onstop=fin;try{r.mr.requestData&&r.mr.state==='recording'&&r.mr.requestData();}catch(e){}
+    try{r.mr.state!=='inactive'?r.mr.stop():fin();}catch(e){fin();}setTimeout(fin,1500);});
+  try{r.stream.getTracks().forEach(t=>t.stop());}catch(e){}
+  afterMic();return {blob,mime:r.mime,ms};}
+const b64=blob=>new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]||'');fr.onerror=rej;fr.readAsDataURL(blob);});
+/* Gemini hears the clip: tidies what was said and says whether it's a command or a request */
+async function hearClip(clip){
+  if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);return {intent:'request',text:'저녁 먹고 시부야에서 놀 거리'};}
+  const data=await b64(clip.blob);
+  const prompt=`이 녹음은 여행 추천 앱 사용자가 화면을 누른 채 한국어(가끔 지명·가게 이름은 외국어)로 말한 거야.
+1) 말한 내용을 정확히 받아 적고, 군말("어", "음", 말 더듬기)과 중복만 걷어내 자연스러운 한 문장으로 다듬어. 뜻을 바꾸거나 내용을 지어내지 마. 지명·가게 이름은 들린 대로 적어.
+2) 무엇인지 하나 골라:
+- "music_off": 배경음악/음악을 꺼 달라는 말
+- "music_on": 배경음악/음악을 켜(틀어) 달라는 말
+- "retaste": 취향을 다시 정하겠다는 말
+- "rename": 내 이름을 바꾸겠다는 말
+- "request": 그 밖의 놀 거리·먹을 곳·갈 곳 같은 추천 요청
+- "none": 말소리가 없거나 알아들을 수 없음
+설명 없이 JSON만: {"text":"다듬은 문장","intent":"위 중 하나"}`;
+  const ask=mime=>gemini(prompt,null,{tools:false,timeout:25000,parts:[{inlineData:{mimeType:mime,data}}],
+    config:{responseMimeType:'application/json',temperature:0}});
+  let res;try{res=await ask(clip.mime);}catch(e){if(/mime|unsupported|400/i.test(e.message)&&clip.mime!=='audio/aac')res=await ask(clip.mime==='audio/mp4'?'audio/aac':'audio/ogg');else throw e;}
+  let j={};try{j=JSON.parse(res.text.replace(/^```(?:json)?|```$/g,'').trim());}catch(e){const m=res.text.match(/\{[\s\S]*\}/);try{j=m?JSON.parse(m[0]):{};}catch(e2){}}
+  return {text:String(j.text||'').trim(),intent:String(j.intent||'').trim()};}
+const MISHEARD='어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?';
+async function handleClip(clip){
+  if(clip.err==='deny'){S.mode='idle';say('마이크를 못 쓰게 돼 있어.<div class="hint">아이폰 설정 › Safari(또는 이 앱) › 마이크를 허용해줘.</div>');return;}
+  if(clip.err){S.mode='idle';say(MISHEARD);return;}
+  if(!clip.blob||clip.blob.size<1200||clip.ms<350){S.mode='idle';say('너무 짧았어.<br>꾹 누른 채로 말하고, 다 말한 다음에 손을 떼줘.');return;}
+  say('음… 잠깐만.',{cursor:false});
+  let h;try{h=await hearClip(clip);}catch(e){S.mode='idle';say(esc(e.message||'못 알아들었어.'));return;}
+  if(!h.text||h.intent==='none'){S.mode='idle';say(MISHEARD);return;}
+  gotText(h.text,h.intent);}
+function typedIntent(t){if(/(음악|배경음|bgm)/i.test(t)&&/(꺼|끄|멈|그만|조용)/.test(t))return 'music_off';if(/(음악|배경음|bgm)/i.test(t)&&/(켜|틀|다시)/.test(t))return 'music_on';
+  if(/취향/.test(t)&&/(다시|새로|바꿀|정할)/.test(t))return 'retaste';if(/이름/.test(t)&&/(바꿔|바꿀|바꾸|다시|새로)/.test(t))return 'rename';return 'request';}
 function typeInput(msg){S.mode='typing';
   say(esc(msg||'하고 싶은 걸 적어줘.')+'<input id="tin" enterkeyhint="done" placeholder="저녁 먹고 시부야에서 놀 거리"><div class="choices"><button class="choice sel" id="tok">확인</button><button class="choice" id="tcancel">취소</button></div>',{cursor:false,active:true});
   const i=$('#tin');setTimeout(()=>i.focus(),50);
-  const ok=()=>{SFX.btn();const v=i.value.trim();i.blur();if(v)gotText(v);else sayIdle();};
+  const ok=()=>{SFX.btn();const v=i.value.trim();i.blur();if(v)gotText(v,typedIntent(v));else sayIdle();};
   $('#tok').onclick=ok;$('#tcancel').onclick=()=>{SFX.btn();i.blur();sayIdle();};i.onkeydown=e=>{if(e.key==='Enter')ok();};}
 
 /* ---------- main touch: hold to talk / swipe up to room / tap Miyeon / tap the dialog box = chat ---------- */
@@ -257,12 +304,12 @@ function typeInput(msg){S.mode='typing';
     holdT=setTimeout(()=>{holdT=null;if(!st)return;
       if(st.chat){if(S.mode!=='chat')return;leaveChat();charEl.classList.add('pressed');SFX.touch();}
       listening=listen();
-      if(listening&&st.chat)say('응? 어디 가고 싶은데? 말해봐.<div class="hint">손을 떼면 끝나.</div>',{cursor:false});
+      if(listening&&st.chat)say(listenHTML('응? 어디 가고 싶은데? 말해봐.'),{cursor:false});
       if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},chat?350:220);};
   const move=e=>{if(!st||listening||st.chat)return;const dy=e.clientY-st.y;
     if(dy<-170){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
   const up=async e=>{if(!st)return;const p=st;clearTimeout(holdT);st=null;charEl.classList.remove('pressed');
-    if(holdT===null&&listening){listening=false;S.mode='busy';const txt=await stopListen();if(txt)gotText(txt);else{S.mode='idle';say('어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?');}}
+    if(holdT===null&&listening){listening=false;S.mode='busy';const clip=await stopListen();await handleClip(clip);}
     else if(p.chat){if(S.mode==='chat'&&e.type==='pointerup'){if(!p.dlg)endChat();else if(!p.choice)chatTap();}}
     else if(S.mode==='idle'&&e.type==='pointerup'){if(p.dlg)startChat();
       else if(!charTapped(p.x,p.y))say('화면을 <span class="q">꾹 누른 채로</span> 말해줘.<div class="hint">위로 밀면 보관함으로 가.</div>');}
@@ -271,14 +318,14 @@ function typeInput(msg){S.mode='typing';
     el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);});
 })();
 
-function gotText(txt){
-  if(/설정/.test(txt)){openSettings();return;}
-  if(/(음악|배경음|bgm)/i.test(txt)&&/(꺼|끄|멈|그만|조용)/.test(txt)){DB.settings.music=false;save();BGM.stop();ambientSession();say('음악 껐어.<div class="hint">"음악 켜줘"라고 하면 다시 틀게.</div>');S.mode='idle';return;}
-  if(/(음악|배경음|bgm)/i.test(txt)&&/(켜|틀|다시)/.test(txt)){DB.settings.music=true;save();ambientSession();music();say('음악 다시 틀었어.');S.mode='idle';return;}
-  if(/취향/.test(txt)&&/(다시|새로|바꿀|정할)/.test(txt)){startTutorial();return;}
-  if(/이름/.test(txt)&&/(바꿔|바꿀|바꾸|다시|새로)/.test(txt)){askName(sayIdle,'이름 바꾸고 싶어? 뭐라고 불러줄까?');return;}
+function gotText(txt,intent){
+  const it=intent||'request';
+  if(it==='music_off'){DB.settings.music=false;save();BGM.stop();ambientSession();say('음악 껐어.<div class="hint">"음악 켜줘"라고 하면 다시 틀게.</div>');S.mode='idle';return;}
+  if(it==='music_on'){DB.settings.music=true;save();ambientSession();music();say('음악 다시 틀었어.');S.mode='idle';return;}
+  if(it==='retaste'){startTutorial();return;}
+  if(it==='rename'){askName(sayIdle,'이름 바꾸고 싶어? 뭐라고 불러줄까?');return;}
   S.mode='confirm';
-  say(`<span class="q">“${esc(txt)}”</span><br>이거 맞지?`,{choices:[{label:'응',fn:()=>startSearch(txt)},{label:'아니',fn:()=>{S.mode='idle';say('앗, 다시 말해줘.<br>화면을 꾹 누른 채로.');}}]});
+  say(`<span class="q">“${esc(txt)}”</span><br>이거 맞지?`,{choices:[{label:'네',fn:()=>startSearch(txt)},{label:'아니요',fn:()=>{S.mode='idle';say('앗, 다시 말해줘.<br>화면을 꾹 누른 채로.');}}]});
 }
 
 /* ---------- location ---------- */
@@ -349,7 +396,7 @@ async function gemini(prompt,loc,opt={}){
   const sets=opt.tools===false?[{tools:null,tc:null}]:[{tools:[{googleMaps:{}}],tc:ll},{tools:[{googleMaps:{}}],tc:null},{tools:[{googleMaps:{}},{googleSearch:{}}],tc:ll}];
   let lastErr='',lastStatus=0,timeouts=0;
   for(const set of sets){
-    const body={contents:[{role:'user',parts:[{text:prompt}]}]};if(opt.config)body.generationConfig=opt.config;if(set.tools)body.tools=set.tools;if(set.tc)body.toolConfig=set.tc;
+    const body={contents:[{role:'user',parts:[{text:prompt},...(opt.parts||[])]}]};if(opt.config)body.generationConfig=opt.config;if(set.tools)body.tools=set.tools;if(set.tc)body.toolConfig=set.tc;
     for(let attempt=0;attempt<2;attempt++){
       let r;try{r=await post(url,body,opt.timeout||45000);}
       catch(e){if(e.name==='AbortError'){timeouts++;if(timeouts>=2)throw new Error('구글 응답이 너무 늦어. 잠깐 있다 다시 하거나 더 빠른 모델(lite)로 바꿔봐.');continue;}
@@ -557,14 +604,14 @@ function edgePull(listEl,onTop,onBottom){let y0=null,edge=null;
 function cardsResume(){S.mode='cards';charEl.classList.add('gone');setTimeout(()=>charEl.classList.remove('front'),700);$('#dimmer').classList.remove('on');setTimeout(()=>showDlg(false),10);}
 edgePull($('#cardList'),()=>{if(S.mode!=='cards')return;SFX.btn();S.mode='clearConfirm';
   $('#dimmer').classList.add('on');charEl.classList.add('front');charEl.classList.remove('gone');showDlg(true);
-  say('추천 카드 지울까?<div class="hint">오른쪽으로 밀어서 저장한 카드만 보관함에 남아.</div>',{choices:[{label:'응',fn:()=>backToIdle()},{label:'아니',fn:cardsResume}]});});
+  say('추천 카드 지울까?<div class="hint">오른쪽으로 밀어서 저장한 카드만 보관함에 남아.</div>',{choices:[{label:'네',fn:()=>backToIdle()},{label:'아니요',fn:cardsResume}]});});
 
 /* route confirm (main, with Miyeon) */
 $('#routeBtn').onclick=()=>{if(!S.pins.length)return;SFX.btn();const pc=pinnedCards(S.cards,S.pins);S.mode='routeConfirm';
   $('#dimmer').classList.add('on');charEl.classList.add('front');charEl.classList.remove('gone');showDlg(true);
   say(`<span class="q">${pc.map(c=>esc(c.name)).join(', ')}</span><br>이 순서로 동선 짜볼까?`,{choices:[
-    {label:'응',fn:()=>openRoute(pc,'cards',S.req)},
-    {label:'아니',fn:cardsResume}]});};
+    {label:'네',fn:()=>openRoute(pc,'cards',S.req)},
+    {label:'아니요',fn:cardsResume}]});};
 
 /* ---------- external links ---------- */
 function gSearch(c){const q=encodeURIComponent(searchText(c));return `https://www.google.com/maps/search/?api=1&query=${q}${c.placeId?`&query_place_id=${encodeURIComponent(c.placeId)}`:''}`;}
@@ -720,7 +767,7 @@ $('#roomRouteBtn').onclick=()=>{SFX.btn();const pc=pinnedCards(allSaved(),roomPi
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px"><div class="tagname" style="background:var(--cream)">동선 짜기</div><div class="win px solid">
     ${pc.map((c,i)=>`<div class="row"><span style="color:var(--gold);margin-right:10px">${i+1}</span>${esc(c.name)}</div>`).join('')}
     <div class="row" style="margin-top:20px">이 순서로 동선 짜볼까?</div>
-    <div class="btnrow"><button class="px gold" id="pyes" style="color:var(--bdark)">응</button><button class="px" id="pno" style="color:var(--beige)">아니</button></div></div></div>`;
+    <div class="btnrow"><button class="px gold" id="pyes" style="color:var(--bdark)">네</button><button class="px" id="pno" style="color:var(--beige)">아니요</button></div></div></div>`;
   $('#room').appendChild(ov);ov.querySelector('#pyes').onclick=()=>{ov.remove();openRoute(pc,'room',req);};ov.querySelector('#pno').onclick=()=>{SFX.btn();ov.remove();};};
 edgePull($('#roomList'),()=>{if(!$('#room').classList.contains('hidden'))toMain();},()=>{if(!$('#room').classList.contains('hidden'))toRouteHistory();});
 
@@ -729,6 +776,7 @@ let fading=false;
 async function stepFade(fromEl,dir,swap){if(fading)return;fading=true;const f=$('#fader');SFX.trans();const steps=[.25,.5,.75,1];
   for(let i=0;i<steps.length;i++){fromEl.style.transform=`translateY(${dir*(i+1)*1.25}%)`;f.style.opacity=steps[i];await sleep(80);}
   await sleep(180);fromEl.style.transform='';swap();for(const o of [.75,.5,.25,0]){f.style.opacity=o;await sleep(90);}fading=false;}
+$('#roomSet').onclick=e=>{e.stopPropagation();if(S.mode!=='room')return;SFX.btn();openSettings('',true);};
 function toRoom(){if(S.mode!=='idle')return;S.mode='room';roomTab='saved';roomPins=[];
   stepFade(mainEl,-1,()=>{mainEl.classList.add('hidden');$('#room').classList.remove('hidden');SCREEN='room';music();renderRoom();$('#roomList').scrollTop=0;});}
 function toMain(){stepFade($('#room'),1,()=>{$('#room').classList.add('hidden');mainEl.classList.remove('hidden');SCREEN='main';music();S.mode='idle';sayIdle();});}
@@ -739,7 +787,7 @@ async function placeLabel(l){if(!l)return '';
     const parts=[a.state||a.province||a.region,a.city||a.town||a.county,a.city_district||a.borough||a.district,a.suburb||a.quarter||a.neighbourhood||a.village];
     const out=[];parts.forEach(x=>{if(x&&!out.includes(x))out.push(x);});
     return out.join(' ')||(j.display_name||'').split(',').slice(0,3).reverse().join(' ').trim();}catch(e){return '';}}
-function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=document.createElement('div');ov.className='overlay';ov.style.alignItems='flex-start';ov.style.overflowY='auto';
+function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';const st=DB.settings;const ov=document.createElement('div');ov.className='overlay';ov.style.alignItems='flex-start';ov.style.overflowY='auto';
   let music=st.music!==false,heroSel=st.hero||'miyeon';
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px;margin:calc(var(--sat) + 30px) 0 30px"><div class="tagname">설정</div><div class="win px solid">
     ${msg?`<div class="sub" style="color:var(--yel);margin-bottom:10px">${esc(msg)}</div>`:''}
@@ -792,7 +840,7 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     try{if(navigator.clipboard&&navigator.clipboard.readText)t=await navigator.clipboard.readText();}catch(e){}
     if(t&&t.trim()){keyIn.type='text';keyIn.value=t.trim();setTimeout(()=>keyIn.type='password',1500);ov.querySelector('#sKeyHint').textContent='붙여넣었어. 저장 눌러줘.';}
     else{keyIn.type='text';keyIn.focus();keyIn.select();ov.querySelector('#sKeyHint').innerHTML='<span style="color:var(--yel)">입력칸을 길게 눌러서 "붙여넣기"를 골라줘.</span>';}};
-  const close=()=>{ov.remove();showDlg(true);if(!DB.settings.key.trim()){sayIdle();return;}
+  const close=()=>{ov.remove();if(fromRoom){S.mode=prevMode;return;}showDlg(true);if(!DB.settings.key.trim()){sayIdle();return;}
     if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());else if(!DB.profile.done)startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
     if(heroSel!==DB.settings.hero){DB.settings.hero=heroSel;DB.chat={recent:[]};applyHero();}
@@ -994,10 +1042,10 @@ function askName(next,msg){S.mode='naming';showDlg(true);
   const i=$('#nin');setTimeout(()=>i.focus(),50);
   const ok=()=>{const v=i.value.trim().slice(0,10);if(!v){i.focus();return;}SFX.btn();i.blur();
     say(`<span class="q">“${esc(v)}”</span><br>${esc(v)}… 맞지?`,{choices:[
-      {label:'응',fn:()=>{DB.user.name=v;save();const n=esc(voc());
+      {label:'네',fn:()=>{DB.user.name=v;save();const n=esc(voc());
         const lines=[`${n}! 좋은 이름이다. 선배가 잘 챙겨줄게.`,`${esc(v)}, 기억했어. 선배는 이름 같은 건 절대 안 까먹어… 아마도.`,`${n}, 반가워. 이름이랑 얼굴이랑 잘 어울린다.`];
-        say(lines[Math.floor(Math.random()*lines.length)],{choices:[{label:'잘 부탁해',fn:next}]});}},
-      {label:'아니',fn:()=>askName(next,'앗, 다시. 이름이 뭐라고?')}]});};
+        say(lines[Math.floor(Math.random()*lines.length)],{choices:[{label:'잘 부탁해요',fn:next}]});}},
+      {label:'아니요',fn:()=>askName(next,'앗, 다시. 이름이 뭐라고?')}]});};
   $('#nok').onclick=ok;i.onkeydown=e=>{if(e.key==='Enter')ok();};}
 
 /* ---------- reset (from settings) ---------- */

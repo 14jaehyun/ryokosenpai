@@ -259,3 +259,10 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .btnrow.four{gap:6px}
 .btnrow.four>*{min-width:0}
 .minibtns [data-st]{font-size:12px}
+
+#room .setbtn{padding:3px 10px;font-size:12px;font-weight:700;color:var(--beige,#f3e6c8)}
+.lfx{display:block;margin:6px 0 0 .5em;height:22px}
+.lfxs{display:block;fill:var(--muted)}
+.lfxs .f{opacity:0;animation:lfx 1.5s steps(1) infinite}
+.lfxs .f0{animation-delay:0.0s}.lfxs .f1{animation-delay:0.3s}.lfxs .f2{animation-delay:0.6s}.lfxs .f3{animation-delay:0.9s}.lfxs .f4{animation-delay:1.2s}
+@keyframes lfx{0%{opacity:1}20%{opacity:0}100%{opacity:0}}
