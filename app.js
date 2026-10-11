@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.8';
+const VERSION='2.3.9';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -117,11 +117,11 @@ const SFX={
   pin(){noise(0,0.012,0.3,'highpass',4000);osc('square',988,988,0.012,0.06,0.06,0.08);osc('square',1319,1319,0.072,0.2,0.06,0.22);},
   btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);},
   /* affection: a soft "뾱" (snaps up) / "뽁" (duller, drops) with a short tail */
-  affUp(){pop(260,880,0.13,0.11,0.035);},
-  affDown(){pop(620,190,0.16,0.16,0.045);},
+  affUp(){coinHit(1390,0,0.2,1,1);coinHit(1850,0.055,0.22,1,1);coinHit(2450,0.11,0.3,1,1);},   // the stat's 띠링 with one more note in front
+  affDown(){let t=0,g=0.16,v=0.3;for(let i=0;i<6;i++){coinHit(1500-i*40,t,v,0.5,0.5);t+=g;g*=0.62;v*=0.62;}},   // a coin bouncing to rest
   /* running-total ticks: a two-hit metal "찰캉" going up, a coin bouncing to rest going down */
   coinUp(){coinHit(1850,0,0.22,1,1);coinHit(2450,0.055,0.3,1,1);},
-  coinDown(){let t=0,g=0.16,v=0.3;for(let i=0;i<6;i++){coinHit(1500-i*40,t,v,0.5,0.5);t+=g;g*=0.62;v*=0.62;}},
+  coinDown(){coinHit(1500,0,0.3,0.5,0.5);coinHit(1300,0.16,0.22,0.5,0.5);},   // two dull notes going down
   /* rebirth potion: a warm detuned pad that swells and rises, a wobbly "부웅~" glide, dreamy bells, a short echo */
   magic(){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const sr=a.sampleRate,n=Math.floor(sr*1.8),b=a.createBuffer(1,n,sr),o=b.getChannelData(0),T=Math.PI*2;
     const pad=[[130.8,.10],[196,.08],[261.6,.07],[329.6,.05],[392,.04]],ph=new Float64Array(pad.length*2);let gp=0;
@@ -267,9 +267,9 @@ const fmtSum=x=>(x>=0?'+':'')+x.toFixed(1);
 function affStatDraw(){const e=$('#affS');if(e)e.innerHTML=`<b>${fmtSum(affOf().sum||0)}</b>`;}
 /* every judged answer adds to a running total: up = the new number rises from below (찰캉), down = it drops from above (통통통) */
 function affStat(x,quiet){const A=affOf(),from=A.sum||0,to=from+x;A.sum=to;save();const e=$('#affS');if(!e)return;
-  if(quiet||fmtSum(from)===fmtSum(to)){affStatDraw();return;}   // the heart is moving this turn: let it have the stage
+  if(fmtSum(from)===fmtSum(to)){affStatDraw();return;}
   const up=x>=0,old=e.querySelector('b'),nb=document.createElement('b');nb.textContent=fmtSum(to);e.appendChild(nb);
-  up?SFX.coinUp():SFX.coinDown();
+  if(!quiet)up?SFX.coinUp():SFX.coinDown();   // the heart is moving this turn: it gets the sound
   if(!nb.animate){if(old)old.remove();return;}
   const d=up?1:-1,ease='cubic-bezier(.3,1.4,.55,1)';
   nb.animate([{transform:`translateY(${14*d}px)`,opacity:0},{transform:'translateY(0)',opacity:1}],{duration:420,easing:ease,fill:'both'});
