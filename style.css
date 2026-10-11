@@ -266,3 +266,8 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 .lfxs .f{opacity:0;animation:lfx 1.5s steps(1) infinite}
 .lfxs .f0{animation-delay:0.0s}.lfxs .f1{animation-delay:0.3s}.lfxs .f2{animation-delay:0.6s}.lfxs .f3{animation-delay:0.9s}.lfxs .f4{animation-delay:1.2s}
 @keyframes lfx{0%{opacity:1}20%{opacity:0}100%{opacity:0}}
+.usage{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
+.usage th,.usage td{padding:3px 2px;text-align:right;white-space:nowrap}
+.usage th{color:var(--muted);font-weight:400}
+.usage td:first-child,.usage th:first-child{text-align:left}
+.usage tr+tr td{border-top:1px solid rgba(160,170,204,.18)}

@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.1';
+const VERSION='2.1.2';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -272,12 +272,12 @@ async function hearClip(clip){
 - "request": 그 밖의 놀 거리·먹을 곳·갈 곳 같은 추천 요청
 - "none": 말소리가 없거나 알아들을 수 없음
 설명 없이 JSON만: {"text":"다듬은 문장","intent":"위 중 하나"}`;
-  const ask=mime=>gemini(prompt,null,{tools:false,timeout:25000,parts:[{inlineData:{mimeType:mime,data}}],
+  const ask=mime=>gemini(prompt,null,{tag:'voice',tools:false,timeout:25000,parts:[{inlineData:{mimeType:mime,data}}],
     config:{responseMimeType:'application/json',temperature:0}});
   let res;try{res=await ask(clip.mime);}catch(e){if(/mime|unsupported|400/i.test(e.message)&&clip.mime!=='audio/aac')res=await ask(clip.mime==='audio/mp4'?'audio/aac':'audio/ogg');else throw e;}
   let j={};try{j=JSON.parse(res.text.replace(/^```(?:json)?|```$/g,'').trim());}catch(e){const m=res.text.match(/\{[\s\S]*\}/);try{j=m?JSON.parse(m[0]):{};}catch(e2){}}
   return {text:String(j.text||'').trim(),intent:String(j.intent||'').trim()};}
-const MISHEARD=code=>'어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?'+(code?`<div class="hint">(${esc(code)})</div>`:'');
+const MISHEARD=()=>'어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?';
 async function handleClip(clip){
   if(clip.err==='deny'){S.mode='idle';say('마이크를 못 쓰게 돼 있어.<div class="hint">아이폰 설정 › Safari(또는 이 앱) › 마이크를 허용해줘.</div>');return;}
   if(clip.err){S.mode='idle';say(MISHEARD('mic-'+clip.err));return;}
@@ -388,6 +388,19 @@ function showLoading(){const ld=$('#loading');ld.innerHTML='찾는 중<span clas
 function hideLoading(){$('#loading').classList.add('hidden');drawLdInfo();}
 async function post(url,body,ms){const ac=new AbortController();const to=setTimeout(()=>ac.abort(),ms);
   try{return await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ac.signal});}finally{clearTimeout(to);}}
+/* token usage log (per feature) — shown at the bottom of settings */
+const USAGE_TAGS={card:'카드 추천',chat:'대화',voice:'음성',etc:'기타'};
+function logUsage(tag,u,grounded){if(!u)return;try{const U=DB.usage||(DB.usage={since:Date.now(),rows:{}});const k=USAGE_TAGS[tag]?tag:'etc';
+  const r=U.rows[k]||(U.rows[k]={n:0,inp:0,think:0,out:0,maps:0});r.n++;r.inp+=(u.promptTokenCount||0)+(u.toolUsePromptTokenCount||0);
+  r.think+=u.thoughtsTokenCount||0;r.out+=u.candidatesTokenCount||0;if(grounded)r.maps++;save();}catch(e){}}
+/* won estimate from the user's own bill (3.5 flash-lite): output incl. thinking ≈ ₩3.4 / 1k, input ≈ ₩0.41 / 1k */
+const wonOf=r=>Math.round((r.think+r.out)*0.0034+r.inp*0.00041);
+function usageHTML(){const U=DB.usage;const ks=U?Object.keys(USAGE_TAGS).filter(k=>U.rows[k]):[];
+  if(!ks.length)return '<div class="small">아직 기록 없음</div>';
+  const f=n=>n.toLocaleString('ko-KR');let T={n:0,inp:0,think:0,out:0,maps:0};ks.forEach(k=>{for(const x in T)T[x]+=U.rows[k][x];});
+  const row=(name,r,b)=>`<tr${b?' style="color:var(--yel)"':''}><td>${name}</td><td>${f(r.n)}</td><td>${f(r.inp)}</td><td>${f(r.think)}</td><td>${f(r.out)}</td><td>₩${f(wonOf(r))}</td></tr>`;
+  return `<div class="small" style="margin-bottom:6px">${new Date(U.since).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}부터 · 금액은 대략</div>
+  <table class="usage"><tr><th></th><th>호출</th><th>입력</th><th>생각</th><th>답</th><th>추정</th></tr>${ks.map(k=>row(USAGE_TAGS[k],U.rows[k])).join('')}${row('합계',T,true)}</table>`;}
 /* tools=false → plain call (no grounding, no Maps fee) */
 async function gemini(prompt,loc,opt={}){
   const st=DB.settings;const model=(st.model||DEFAULT_MODEL).trim();
@@ -401,7 +414,7 @@ async function gemini(prompt,loc,opt={}){
       let r;try{r=await post(url,body,opt.timeout||45000);}
       catch(e){if(e.name==='AbortError'){timeouts++;if(timeouts>=2)throw new Error('구글 응답이 너무 늦어. 잠깐 있다 다시 하거나 더 빠른 모델(lite)로 바꿔봐.');continue;}
         lastErr='net';await sleep(1200);continue;}
-      if(r.ok){const j=await r.json();const c=j.candidates?.[0]||{};const gm=c.groundingMetadata||{};
+      if(r.ok){const j=await r.json();logUsage(opt.tag,j.usageMetadata,!!set.tools);const c=j.candidates?.[0]||{};const gm=c.groundingMetadata||{};
         return {text:(c.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join(''),raw:gm.groundingChunks||[],
           chunks:(gm.groundingChunks||[]).map(x=>x.maps).filter(Boolean),supports:gm.groundingSupports||[]};}
       const t=await r.text();lastStatus=r.status;
@@ -452,8 +465,8 @@ ${String(ctxText||'').slice(0,2500)}
 출력은 JSON 배열만:
 [{"i":0,"title":"목록의 이름 그대로","name":"한국어 표시 이름","address":"Google 지도 주소","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간을 HH:MM-HH:MM 형식으로(구간이 여러 개면 쉼표로, 자정 넘으면 예: 18:00-02:00), 24시간이면 24시간, 오늘 휴무면 휴무, 모르면 빈 문자열","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
   let arr=null;
-  try{const r=await gemini(p,S.loc,{timeout:40000});arr=jsonArr(r.text);}catch(e){if(/한도|결제|API 키/.test(e.message))throw e;}
-  if(!arr){const r=await gemini(p,null,{tools:false,timeout:30000});arr=jsonArr(r.text)||[];}
+  try{const r=await gemini(p,S.loc,{tag:'card',timeout:40000});arr=jsonArr(r.text);}catch(e){if(/한도|결제|API 키/.test(e.message))throw e;}
+  if(!arr){const r=await gemini(p,null,{tag:'card',tools:false,timeout:30000});arr=jsonArr(r.text)||[];}
   const tkey=t=>norm(cleanTitle(t));
   return chs.map((ch,i)=>{const k=tkey(ch.title);
     let it=arr.find(x=>x&&x.title&&tkey(x.title)===k)||arr.find(x=>x&&+x.i===i&&(!x.title||tkey(x.title)===k))||arr[i];
@@ -477,13 +490,13 @@ async function fetchCards(nT,nR,bg){const setStage=bg?()=>{}:window.setStage;
   const want=nT+nR;let got=[];const used=new Set(S.shownNames);const usedPid=new Set();
   const add=c=>{if(!c||used.has(c.name)||(c.placeId&&usedPid.has(c.placeId)))return;used.add(c.name);if(c.placeId)usedPid.add(c.placeId);got.push(c);};
   setStage('구글맵에서 찾는 중');
-  let res=await gemini(buildPrompt(nT,nR),S.loc);
+  let res=await gemini(buildPrompt(nT,nR),S.loc,{tag:'card'});
   const arr=jsonArr(res.text)||[];let left=[...res.chunks];
   for(const c of arr){if(!c||!c.name)continue;const ch=matchChunk(c,res);if(!ch||!sameKoPlace([c.name,c.mapsTitle],ch.title))continue;left=left.filter(x=>x!==ch);add(mkCard(c,ch));}
   DIAG=`모델 ${arr.length}곳 · 구글맵 확인 ${res.chunks.length}곳 · 일치 ${got.length}곳`;
   if(got.length<Math.min(6,want)&&left.length){setStage('확인된 곳 정리 중');try{(await describeChunks(left.slice(0,want-got.length),res.text,nR)).forEach(add);}catch(e){}}
   if(got.length<3){setStage('한 번 더 찾는 중');
-    const r2=await gemini(naturalPrompt(want),S.loc);DIAG+=` / 재시도 확인 ${r2.chunks.length}곳`;
+    const r2=await gemini(naturalPrompt(want),S.loc,{tag:'card'});DIAG+=` / 재시도 확인 ${r2.chunks.length}곳`;
     const fresh=r2.chunks.filter(ch=>!usedPid.has(String(ch.placeId||'').replace(/^places\//,'')));
     if(fresh.length){setStage('확인된 곳 정리 중');try{(await describeChunks(fresh.slice(0,want),r2.text,nR)).forEach(add);}catch(e){}}}
   const full=got.filter(c=>c.line1||c.line2);if(full.length>=5)got=full;
@@ -627,7 +640,7 @@ function openDetail(c){SFX.btn();const d=distM(S.loc,c);
   const ov=document.createElement('div');ov.className='overlay';const kr=isKR(c);
   const btns=['<button class="px" data-l="g">구글맵<small>후기</small></button>','<button class="px" data-l="y">유튜브<small>영상</small></button>'];
   if(kr)btns.push('<button class="px" data-l="n">네이버<small>지도</small></button>','<button class="px" data-l="k">카카오<small>지도</small></button>');
-  ov.innerHTML=`<div class="win px solid"><h3>${esc(c.name)}</h3>${placeTitle(c)&&placeTitle(c)!==c.name?`<div class="sub" style="margin-bottom:4px">${esc(placeTitle(c))}</div>`:''}
+  ov.innerHTML=`<div class="win px solid"><h3>${esc(c.name)}</h3>${placeTitle(c)&&norm(placeTitle(c))!==norm(c.name)?`<div class="sub" style="margin-bottom:4px">${esc(placeTitle(c))}</div>`:''}
     <div class="sub">${esc(c.line1)}<br>${esc(c.line2)}</div><div class="sep"></div>
     ${(()=>{const o=openNow(c);return `<div class="row" style="color:${o===true?'#6ee696':o===false?'#ff9a8a':'#a0aacc'}">■ ${o===true?'영업 중':o===false?'영업 종료':'영업 시간 확인'}${c.hours?' · '+esc(c.hours):''}</div>`;})()}
     ${d!=null?`<div class="row">현재 위치에서 도보 ${walkMin(d)}분 · ${fmtKm(d)}</div>`:''}
@@ -807,6 +820,10 @@ function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';cons
     <div class="sep"></div>
     <button class="chk ${music?'on':'off'}" id="sMusic" style="margin-top:0"><i></i>배경음악</button>
     <div class="sep"></div>
+    <div class="row" style="margin-top:0">제미나이 사용량</div>
+    <div id="sUsage">${usageHTML()}</div>
+    <div class="minibtns"><button class="px" id="sUsageClr" style="color:var(--muted)">사용량 기록 지우기</button></div>
+    <div class="sep"></div>
     <div class="minibtns"><button class="px" id="sReset" style="color:var(--muted)">초기화…</button></div>
     <div class="btnrow"><button class="px gold" id="sSave">저장</button><button class="px" id="sClose" style="color:var(--muted)">닫기</button></div>
     <div class="small" style="text-align:center;margin-top:12px">여행선배 v${VERSION}</div></div></div>`;
@@ -832,6 +849,7 @@ function openSettings(msg,fromRoom){const prevMode=S.mode;S.mode='settings';cons
       box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어. 37.5, 127.0 같은 숫자를 넣어줘');return;}box.remove();setManual(p.lat,p.lng);};};
     const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
   ov.querySelector('#sReset').onclick=()=>{SFX.btn();openReset();};
+  ov.querySelector('#sUsageClr').onclick=()=>{SFX.btn();DB.usage={since:Date.now(),rows:{}};save();ov.querySelector('#sUsage').innerHTML=usageHTML();};
   ov.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{SFX.touch();heroSel=b.dataset.h;
     ov.querySelectorAll('[data-h]').forEach(x=>{const on=x.dataset.h===heroSel;x.classList.toggle('gold',on);x.style.color=on?'var(--dark)':'';});});
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
@@ -985,7 +1003,7 @@ const DEMO_CHAT=[
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
 async function chatAsk(final){
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};}
-  const r=await gemini(chatPrompt(final),null,{tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
+  const r=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   const v=chatParse(r.text);if(!v)throw new Error('대답을 못 알아들었어');return v;}
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
 async function startChat(){
