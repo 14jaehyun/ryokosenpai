@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.2.5';
+const VERSION='2.3.0';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -118,7 +118,20 @@ const SFX={
   btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);},
   /* affection: a soft "뾱" (snaps up) / "뽁" (duller, drops) with a short tail */
   affUp(){pop(260,880,0.13,0.11,0.035);},
-  affDown(){pop(620,190,0.16,0.16,0.045);}
+  affDown(){pop(620,190,0.16,0.16,0.045);},
+  /* rebirth potion: a warm detuned pad that swells and rises, a wobbly "부웅~" glide, dreamy bells, a short echo */
+  magic(){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const sr=a.sampleRate,n=Math.floor(sr*1.8),b=a.createBuffer(1,n,sr),o=b.getChannelData(0),T=Math.PI*2;
+    const pad=[[130.8,.10],[196,.08],[261.6,.07],[329.6,.05],[392,.04]],ph=new Float64Array(pad.length*2);let gp=0;
+    for(let i=0;i<n;i++){const t=i/sr,vib=Math.sin(T*5.5*t),rise=1+0.06*Math.min(1,t/0.5);let v=0;
+      pad.forEach(([f,g],k)=>{[-1.6,1.6].forEach((d,j)=>{const q=k*2+j;ph[q]+=(f+d)*(1+0.004*vib)*rise/sr;v+=Math.sin(T*ph[q])*g*0.5;});});
+      v*=Math.min(1,t/0.12)*Math.exp(-Math.max(0,t-0.25)/0.55);
+      const gf=180*Math.pow(2,Math.min(t,0.7)/0.7*1.3)*(1+0.03*Math.sin(T*7*t));gp+=gf/sr;
+      v+=(Math.sin(T*gp)+0.3*Math.sin(2*T*gp))*Math.min(1,t/0.05)*Math.exp(-t/0.45)*0.09;o[i]=v;}
+    [1047,1319,1568,2093,1760,2637].forEach((f,k)=>{const j=Math.floor(sr*(0.18+k*0.11+Math.random()*0.02));
+      for(let i=j;i<n;i++){const t=(i-j)/sr;o[i]+=(Math.sin(T*f*t)+0.25*Math.sin(T*f*2.01*t))*Math.exp(-t/0.35)*0.025*(1+0.3*Math.sin(T*6*t));}});
+    const dry=Float32Array.from(o);[[0.037,.35],[0.053,.3],[0.079,.25],[0.113,.2],[0.161,.15]].forEach(([dl,g])=>{const k=Math.floor(sr*dl);for(let i=k;i<n;i++)o[i]+=dry[i-k]*g;});
+    for(let i=0;i<n;i++)o[i]*=0.55;
+    const src=a.createBufferSource();src.buffer=b;src.connect(SFXOUT);src.start();}
 };
 function pop(f0,f1,dur,vol,tau){if(MICOPEN||AWAY)return;const a=audio();if(!a)return;
   [[0,1],[0.029,0.32],[0.043,0.1],[0.067,0.033]].forEach(([dt,g])=>{const s=a.currentTime+dt;
@@ -224,9 +237,10 @@ const iya=n=>n+(hasBatchim(n)?'이야':'야');   // 미연이야 / 미즈키야 
 const AFF_SVG=(()=>{const H=["..##.##..",".#######.","#########","#########",".#######.","..#####..","...###...","....#...."],HI=['2,1','1,2'];let r='';
   H.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==='#')r+=`<rect x="${x*4}" y="${y*4}" width="4" height="4" fill="${HI.includes(x+','+y)?'#ffd1e0':'#ff6f9c'}"/>`;}));
   return `<svg width="36" height="32" viewBox="0 0 36 32" shape-rendering="crispEdges">${r}</svg>`;})();
-const AFF_START=50;
+const AFF_START=30;
 function affOf(){DB.aff=DB.aff||{};
-  if(!DB.affBase){Object.values(DB.aff).forEach(a=>{a.v=(a.v||0)+AFF_START;});DB.affBase=1;}   // older saves started at 0
+  if(!DB.affBase){Object.values(DB.aff).forEach(a=>{a.v=(a.v||0)+50;});DB.affBase=1;}   // older saves started at 0
+  if(DB.affBase<2){Object.values(DB.aff).forEach(a=>{a.v=AFF_START;a.acc=0;});DB.affBase=2;if(DB.user&&DB.user.name&&DB.talks==null)DB.talks=10;}   // v2.3: everyone starts over at 30
   const k=DB.settings.hero||'miyeon';return DB.aff[k]||(DB.aff[k]={v:AFF_START,acc:0});}
 const AFF_H=22;
 function affDraw(v){const n=$('#affN');if(!n)return;n.innerHTML=String(v).split('').map(c=>`<span class="d"><span class="s"><i>${c}</i></span></span>`).join('');}
@@ -242,6 +256,7 @@ function affRoll(from,to,dur,delay){const n=$('#affN'),up=to>from,len=Math.max(S
   setTimeout(()=>affDraw(to),delay+dur+len*25+400);}
 function affShow(){const h=$('#affH');if(h&&!h.firstChild)h.innerHTML=AFF_SVG;affDraw(affOf().v);}
 function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();
+  if(to===0&&!DB.locked)setTimeout(()=>lockOut(),900);
   const h=$('#affH');if(!h||!h.animate){affDraw(to);return;}
   if(d>0){SFX.affUp();
     h.animate([{transform:'none'},{transform:'scale(1.25,.75)',offset:.14},{transform:'translateY(-22px) scale(.85,1.18)',offset:.42},{transform:'translateY(-24px) scale(.95,1.05)',offset:.55},
@@ -254,7 +269,7 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
-const AFF_SCALE=2,AFF_DOWN=2,AFF_UP=1.6;   // 10 turns per move → 5; a drop counts twice a rise (raising her is the hard part)
+const AFF_SCALE=2,AFF_DOWN=1.6,AFF_UP=1.6;   // rises and drops weigh the same (traps are 1~3 per set now)
 function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
@@ -354,6 +369,7 @@ function typeInput(msg){S.mode='typing';
 /* ---------- main touch: hold to talk / swipe up to room / tap Miyeon / tap the dialog box = chat ---------- */
 (function(){let st=null,holdT=null,listening=false;
   const down=e=>{const chat=S.mode==='chat';
+    if(S.mode==='locked'){audio();st={x:e.clientX,y:e.clientY,locked:true};holdT=null;listening=false;return;}
     if(!chat&&S.mode!=='idle')return;audio();
     st={x:e.clientX,y:e.clientY,dlg:e.currentTarget===dlgWrap,chat,choice:!!e.target.closest('.choice')};listening=false;
     if(!chat){charEl.classList.add('pressed');SFX.touch();}
@@ -366,6 +382,7 @@ function typeInput(msg){S.mode='typing';
   const move=e=>{if(!st||listening||st.chat)return;const dy=e.clientY-st.y;
     if(dy<-170){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
   const up=async e=>{if(!st)return;const p=st;clearTimeout(holdT);st=null;charEl.classList.remove('pressed');
+    if(p.locked){if(e.type==='pointerup'&&S.mode==='locked'){SFX.touch();shun();}return;}
     if(holdT===null&&listening){listening=false;S.mode='busy';const clip=await stopListen();await handleClip(clip);}
     else if(p.chat){if(S.mode==='chat'&&e.type==='pointerup'){if(!p.dlg)endChat();else if(!p.choice)chatTap();}}
     else if(S.mode==='idle'&&e.type==='pointerup'){if(p.dlg)startChat();
@@ -822,6 +839,10 @@ function renderRoom(){const L=$('#roomList');roomTab='saved';
   L.querySelectorAll('.cw').forEach(w=>{const c=allSaved().find(x=>x.id===w.dataset.id),card=w.querySelector('.card');
     gestures(w,card,{onTap:()=>roomPin(c,card),onLong:()=>openDetail(c),onLeft:()=>{const g=DB.groups.find(x=>x.cards.includes(c));
       g.cards=g.cards.filter(x=>x!==c);if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
+  L.insertAdjacentHTML('beforeend',`<div class="stest"><div class="note">호감도 테스트 · 지금 캐릭터(${esc(hn())}) 기준</div>
+    <div class="minibtns"><button class="px" data-aff="10">호감 10</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div></div>`);
+  L.querySelectorAll('[data-aff]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();const A=affOf(),t=b.dataset.aff;
+    A.v=t==='+3'?A.v+3:+t;A.acc=0;save();affDraw(A.v);toast(`${hn()} 호감도 ${A.v}`+(A.v===0&&!DB.locked?' · 나가면 화내고 떠나':''));});
   updateRoomPins();}
 function updateRoomPins(){const all=allSaved();const pc=pinnedCards(all,roomPins);const L=$('#roomList');L.classList.toggle('showdist',pc.length>0&&roomTab==='saved');
   if(roomTab==='saved')L.querySelectorAll('.card').forEach(el=>{const c=all.find(x=>x.id===el.dataset.id);if(!c)return;const pinned=roomPins.includes(c.id);
@@ -847,9 +868,10 @@ async function stepFade(fromEl,dir,swap){if(fading)return;fading=true;const f=$(
   for(let i=0;i<steps.length;i++){fromEl.style.transform=`translateY(${dir*(i+1)*1.25}%)`;f.style.opacity=steps[i];await sleep(80);}
   await sleep(180);fromEl.style.transform='';swap();for(const o of [.75,.5,.25,0]){f.style.opacity=o;await sleep(90);}fading=false;}
 $('#roomSet').onclick=e=>{e.stopPropagation();if(S.mode!=='room')return;SFX.btn();openSettings('',true);};
-function toRoom(){if(S.mode!=='idle')return;S.mode='room';roomTab='saved';roomPins=[];
+function toRoom(){if(S.mode!=='idle'&&S.mode!=='locked')return;S.mode='room';roomTab='saved';roomPins=[];
   stepFade(mainEl,-1,()=>{mainEl.classList.add('hidden');$('#room').classList.remove('hidden');SCREEN='room';music();renderRoom();$('#roomList').scrollTop=0;});}
-function toMain(){stepFade($('#room'),1,()=>{$('#room').classList.add('hidden');mainEl.classList.remove('hidden');SCREEN='main';music();S.mode='idle';showDlg(true);sayIdle();});}
+function toMain(){stepFade($('#room'),1,()=>{$('#room').classList.add('hidden');mainEl.classList.remove('hidden');SCREEN='main';music();S.mode='idle';showDlg(true);
+  if(DB.locked)applyLocked();else if(affOf().v<=0)lockOut();else sayIdle();});}
 
 /* ---------- settings ---------- */
 async function placeLabel(l){if(!l)return '';
@@ -1030,7 +1052,7 @@ function slipRule(){if((DB.settings.hero||'miyeon')!=='mizuki')return '';
 /* who lets their feelings show, and how often (the app rolls the dice each turn)
    him: almost never (1 in 150). her: never below 60; 60+ 1 in 50, 75+ 1 in 10, 90+ 1 in 2 */
 function loveRule(){const v=affOf().v,me=Math.random()<1/150;
-  const p=v>=90?1/2:v>=75?1/10:v>=60?1/50:0,her=Math.random()<p;
+  const p=v>=86?1/2:v>=65?1/10:v>=44?1/50:0,her=Math.random()<p;
   return [me?'[후배 선택지] 이번엔 선택지 중 딱 하나만, 후배가 선배를 좋아하는 마음이 아주 살짝 새어 나오는 말을 넣어(말끝 흐리며 바로 얼버무림).'
            :'[후배 선택지] 후배는 극도로 소심해서 선배를 좋아하는 티를 전혀 못 내. 설레는 말·칭찬으로 호감을 드러내는 선택지는 넣지 마.',
     her?`[${hn()}] 이번 대사에서는 후배에 대한 호감을 살짝 드러내(말하다 멈칫하거나, 무심코 진심이 새어 나왔다가 수습하는 정도).`
@@ -1054,13 +1076,17 @@ const MOOD_TONE={good:'평소보다 말이 많고 잘 웃어',touchy:'말끝이 
 function todayMood(k){const d=new Date(),day=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
   if(!DB.moods||DB.moods.day!==day){const ks=Object.keys(MOODS);DB.moods={day,m:{}};Object.keys(HEROES).forEach(h=>DB.moods.m[h]=ks[Math.floor(Math.random()*ks.length)]);save();}
   return DB.moods.m[k]||'good';}
+function coldRule(k){k=k||DB.settings.hero||'miyeon';const v=(DB.aff&&DB.aff[k]||{v:AFF_START}).v,nm=HEROES[k].name;
+  const a=v<=10?`[지금 ${nm}의 마음] 후배에게 많이 실망해서 차가워졌어. 말이 짧고 퉁명스럽고 거리를 둬(성격대로). 그래도 대화는 이어가.`:'';
+  const b=(DB.talks||0)<=2?`[관계] 후배와는 막 알게 된 사이야. 아직 서로 잘 몰라서 처음 만난 사람처럼 살짝 어색하고 조심스럽게 대해.`:'';
+  return [a,b].filter(Boolean).join('\n');}
 function moodRule(){const m=todayMood(DB.settings.hero||'miyeon');
   return `[오늘 ${hn()}의 속기분 — 절대 직접 말하지 말 것(기분 이름·"오늘 예민해" 같은 말 금지). 말투에만 은근히 묻어나게: ${MOOD_TONE[m]}] ${MOODS[m]}`;}
-/* the same kind of answer over and over wears thin: 2 in a row → half, 3+ → it backfires */
+/* the same kind of answer over and over wears thin: 3 in a row → it backfires */
 const KINDS=['tease','kind','agree','odd'];let PICKED=[];
 function streakAff(c){PICKED=[...PICKED,c.k||'?'].slice(-6);let n=0;for(let i=PICKED.length-1;i>=0&&PICKED[i]===PICKED[PICKED.length-1];i--)n++;
   if(c.k==null||c.k==='?')return c.aff;
-  if(n>=3)return Math.min(c.aff,-0.15);if(n===2&&c.aff>0)return c.aff*0.5;return c.aff;}
+  if(n>=3)return Math.min(c.aff,-0.15);return c.aff;}
 function nameRule(){const n=DB.user.name;return n?`후배 이름은 "${n}". 대화 중에 가끔(매번은 말고) 이름으로 불러. 부를 때는 "${voc()}"처럼.`:'후배 이름은 몰라. 부를 일이 있으면 "후배"라고만.';}
 const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','선배가 요즘 빠져 있는 것'];
 /* she can wrap up only after 3+ answers, then 10% chance each turn (avg ~12 answers), always by 30 */
@@ -1085,6 +1111,7 @@ ${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너�
 `:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
 [선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
 [선택지 결] 각 선택지에 k로 결을 붙여: 놀리거나 장난치는 말 "tease", 다정하거나 챙겨주는 말 "kind", 맞장구·질문 "agree", 엉뚱한 말 "odd".`}
+${coldRule()}
 ${moodRule()}
 ${loveRule()}
 ${slipRule()}
@@ -1115,6 +1142,7 @@ function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meTe
 async function startChat(){
   if(!DB.settings.key.trim()){say('앗, API 키가 없으면 선배가 말을 못 해…<div class="hint">설정에서 키를 넣어줘.</div>');return;}
   dlgWrap.classList.add('big');
+  DB.talks=(DB.talks||0)+1;save();
   S.mode='chat';C.gen++;C.hist=[];C.picks=0;C.ended=false;C.busy=false;if(window.BIRD)BIRD.scare();if(window.CAT)CAT.scare();
   chatThink('');await chatStep(false);}
 async function chatStep(final,bye){const gen=C.gen;C.busy=true;
@@ -1170,7 +1198,7 @@ const BYE_FALLBACK={miyeon:'앗, 나 가봐야 할 시간이다! 재밌게 다�
 const HI_FALLBACK={miyeon:'어? 나 불렀어? 헤헤, 마침 심심했는데 잘됐다.',sujeong:'왔어? …같이 걷자.',mizuki:'에헤, 나 찾았어? 오늘은 나랑 다니는 거지?'};
 function heroOnly(k){return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${HEROES[k].name}'이야. ${HERO_BASE}\n${HEROES[k].trait}`;}
 async function heroLine(k,task){const key=DB.settings.key.trim().toLowerCase();if(!key||key==='demo')return null;
-  const p=`${heroOnly(k)}\n${nameRule()}\n[상황]\n${chatCtx()}\n[할 일] ${task}\n한두 문장, 반말. JSON만: {"line":"대사","mood":"normal"}`;
+  const p=`${heroOnly(k)}\n${nameRule()}\n${coldRule(k)}\n[상황]\n${chatCtx()}\n[할 일] ${task}\n한두 문장, 반말. JSON만: {"line":"대사","mood":"normal"}`;
   try{const r=await gemini(p,null,{tag:'chat',tools:false,timeout:15000,config:{responseMimeType:'application/json',temperature:1.0}});
     const a=r.text.indexOf('{'),b=r.text.lastIndexOf('}');const v=JSON.parse(r.text.slice(a,b+1));return v&&v.line?String(v.line).trim():null;}catch(e){return null;}}
 let SWAPPING=false;
@@ -1202,7 +1230,7 @@ $('#swapBtn').addEventListener('pointerdown',e=>e.stopPropagation());
       if(dbl)setTimeout(()=>{if(!img.src.endsWith(h.img))return;img.src=h.blink;setTimeout(()=>{if(img.src.endsWith(h.blink))img.src=h.img;},100);},130);},110);}
   const next=()=>setTimeout(()=>{blinkOnce();next();},(1800+Math.random()*4200+(Math.random()<0.15?3000:0))*1.5);
   next();})();
-$('#swapBtn').onclick=e=>{e.stopPropagation();if(SWAPPING)return;
+$('#swapBtn').onclick=e=>{e.stopPropagation();if(DB.locked){if(S.mode==='locked')potionTap();return;}if(SWAPPING)return;
   if(S.mode==='idle'){waveHand();SFX.btn();byeFromIdle();return;}
   if(S.mode==='chat'){if(C.leaveNext)return;waveHand();SFX.btn();
     if(C.byeReady||C.byeNow)return;
@@ -1211,6 +1239,43 @@ $('#swapBtn').onclick=e=>{e.stopPropagation();if(SWAPPING)return;
     if(choicesUp){C.leaveNext=true;return;}   // pick an answer → she answers with her goodbye
     C.byeNow=true;                            // she's still talking → the next ▼ goes straight to her goodbye
     if(C.more){C.more=()=>{C.more=null;C.byeNow=false;chatByeNow();};}}};
+
+/* ---------- affection 0: she storms off, the others won't talk to you either. Only the potion (rebirth) brings them back ---------- */
+const ANGRY_FALLBACK={miyeon:'…진짜 너무해. 이제 너랑 안 놀 거야. 다시는 부르지 마!',sujeong:'…됐어. 여기까지야. 찾지 마.',mizuki:'…그래, 이제 알겠어. 나 혼자 착각했던 거구나. 잘 지내.'};
+const SHUN={miyeon:['…얘기 들었어. 지금은 너랑 놀고 싶지 않아.','미안, 지금은… 아니야.','나한테도 그럴 거잖아. 싫어.'],
+  sujeong:['…들었어. 할 말 없어.','지금은 안 돼.','…실망이야.'],
+  mizuki:['그 애한테 그랬다며? …나한테도 그러겠지.','에… 지금은 말 걸지 마.','실망했어. 진짜로.']};
+async function lockOut(){if(DB.locked)return;const cur=DB.settings.hero||'miyeon';DB.locked={by:cur};save();
+  if(S.mode==='chat'){while(C.typing||C.busy)await sleep(200);await sleep(900);leaveChat();}
+  else if(S.mode==='cards')backToIdle();
+  S.mode='lockbye';showDlg(true);say('<span class="think"></span>',{cursor:false});
+  const line=(await heroLine(cur,'후배에게 완전히 실망했어. '+HEROES[cur].name+'의 성격대로 화를 내며 이제 끝이라고 말하고 떠나(다시는 안 볼 것처럼, 짧게).'))||ANGRY_FALLBACK[cur];
+  charEl.classList.remove('fluster','huff');void charEl.offsetWidth;charEl.classList.add('huff');
+  S.mode='lockWait';say(esc(line));}
+function lockGone(){S.mode='swap';const img=$('#charImg');
+  if(!img.animate){applyLocked();return;}
+  img.style.transformOrigin='70% 70%';
+  const out=img.animate([{transform:'scale(1)',opacity:1},{transform:'scale(0)',opacity:0}],{duration:1050,easing:'cubic-bezier(.5,0,.75,0)',fill:'forwards'});
+  out.onfinish=()=>{out.cancel();img.style.transformOrigin='';applyLocked();};}
+function applyLocked(){S.mode='locked';$('#charImg').style.opacity='0';$('#heroName').style.visibility='hidden';$('#swapBtn').classList.add('potion');
+  showDlg(true);say('…아무도 대답하지 않는다.',{cursor:false});}
+let shunLast='';
+function shun(){const by=DB.locked&&DB.locked.by,ks=Object.keys(HEROES).filter(k=>k!==by),k=ks[Math.floor(Math.random()*ks.length)];
+  let l;do{l=SHUN[k][Math.floor(Math.random()*SHUN[k].length)];}while(l===shunLast&&SHUN[k].length>1);shunLast=l;
+  const t=$('#heroName');t.textContent=HEROES[k].name;t.style.visibility='';say(esc(l),{cursor:false});}
+[$('#touch'),dlgWrap].forEach(el=>el.addEventListener('pointerup',()=>{if(S.mode==='lockWait'){SFX.btn();lockGone();}}));
+function potionTap(){const i=$('#swapBtn i');SFX.magic();
+  if(i&&i.animate){const k=[];for(let f=0;f<=24;f++){const t=f/24*0.75;k.push({transform:`rotate(${(14*Math.exp(-t*5)*Math.sin(2*Math.PI*t*3.2)).toFixed(2)}deg)`});}i.animate(k,{duration:750});}
+  if(document.querySelector('#rebirth'))return;
+  setTimeout(()=>{const m=document.createElement('div');m.id='rebirth';
+    m.innerHTML='<div class="dim"></div><div class="box px">취향만 남기고 초기화합니다.<div class="choices"><button class="choice" data-r="1">네</button><button class="choice" data-r="0">아니요</button></div></div>';
+    mainEl.appendChild(m);
+    m.querySelectorAll('[data-r]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();if(b.dataset.r==='1')rebirth();else m.remove();});
+    m.addEventListener('pointerdown',e=>e.stopPropagation());},350);}
+async function rebirth(){const f=$('#fader');f.style.background='#fff';for(const o of [.25,.5,.75,1]){f.style.opacity=o;await sleep(110);}
+  const ks=Object.keys(HEROES);
+  Object.assign(DB,{user:{name:''},chat:{recent:[]},aff:{},affBase:2,moods:null,groups:[],passed:[],routes:[],locked:null,talks:0});
+  DB.settings.hero=ks[Math.floor(Math.random()*ks.length)];save();await sleep(300);location.reload();}
 
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
 /* chatting counts as idle time too: the timer keeps running and she can drop by (landing above the big box) */
@@ -1233,7 +1298,7 @@ const hasBatchim=s=>{const c=String(s).charCodeAt(String(s).length-1);return c>=
 const isHangul=s=>{const c=String(s).charCodeAt(String(s).length-1);return c>=0xAC00&&c<=0xD7A3;};
 function voc(){const n=DB.user.name;if(!n)return '후배';return isHangul(n)?n+(hasBatchim(n)?'아':'야'):n;}
 function askName(next,msg){S.mode='naming';showDlg(true);
-  msg=msg||(DB.profile.done?'아 맞다, 우리 꽤 같이 다녔는데 나 아직 네 이름도 모르잖아.<br>이름이 뭐야?':'안녕! 난 '+iya(hn())+'. 여행은 선배한테 맡겨.<br>근데 너, 이름이 뭐야?');
+  msg=msg||(DB.talks===0?'어… 처음 보는 얼굴이네? 안녕, 난 '+iya(hn())+'.<br>너는 이름이 뭐야?':DB.profile.done?'아 맞다, 우리 꽤 같이 다녔는데 나 아직 네 이름도 모르잖아.<br>이름이 뭐야?':'안녕! 난 '+iya(hn())+'. 여행은 선배한테 맡겨.<br>근데 너, 이름이 뭐야?');
   say(msg+'<input id="nin" maxlength="10" enterkeyhint="done" autocomplete="off" placeholder="이름"><div class="choices"><button class="choice sel" id="nok">확인</button></div>',{cursor:false,active:true});
   const i=$('#nin');setTimeout(()=>i.focus(),50);
   const ok=()=>{const v=i.value.trim().slice(0,10);if(!v){i.focus();return;}SFX.btn();i.blur();
@@ -1295,7 +1360,8 @@ document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input'))e.preventDefault();lastTouch=n;},{passive:false});
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('input'))e.preventDefault();});
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
-if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 '+iya(hn())+'.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
+if(DB.locked&&DB.settings.key.trim())applyLocked();
+else if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 '+iya(hn())+'.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
 else if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());
 else if(!DB.profile.done)startTutorial();
 else sayIdle();

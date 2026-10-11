@@ -288,3 +288,11 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 #swapBtn{position:absolute;right:24px;top:calc(var(--sat) + 79px);z-index:5;padding:0;margin:0;background:none;border:0;filter:brightness(.92) drop-shadow(0 2px 0 rgba(0,0,0,.45));cursor:pointer;-webkit-tap-highlight-color:transparent}
 #swapBtn.hidden{display:none}
 #swapBtn i{display:block;width:34px;height:38px;background:url(hand.png) 0 0/34px 38px no-repeat;image-rendering:pixelated;transform-origin:55% 95%;transform:rotate(-20deg)}
+/* affection 0: the rebirth potion takes the hand's place */
+#swapBtn.potion{top:calc(var(--sat) + 70px);right:27px}
+#swapBtn.potion i{width:28px;height:42px;background:url(potion.png) 0 0/224px 42px no-repeat;transform:none;transform-origin:50% 95%;animation:potion 1.28s steps(8) infinite}
+@keyframes potion{to{background-position:-224px 0}}
+#rebirth{position:absolute;inset:0;z-index:30}
+#rebirth .dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+#rebirth .box{position:absolute;left:12%;right:12%;top:40%;padding:18px 18px 12px;font-weight:700;font-size:16px;line-height:1.5;text-align:center}
+#rebirth .choices{justify-content:center}
