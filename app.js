@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.3';
+const VERSION='2.3.4';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -840,8 +840,10 @@ function renderRoom(){const L=$('#roomList');roomTab='saved';
     gestures(w,card,{onTap:()=>roomPin(c,card),onLong:()=>openDetail(c),onLeft:()=>{const g=DB.groups.find(x=>x.cards.includes(c));
       g.cards=g.cards.filter(x=>x!==c);if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
   L.insertAdjacentHTML('beforeend',`<div class="stest"><div class="note">호감도 테스트 · 지금 캐릭터(${esc(hn())}) 기준</div>
-    <div class="minibtns"><button class="px" data-aff="4">호감 4</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div></div>`);
+    <div class="minibtns"><button class="px" data-aff="4">호감 4</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div>
+    <div class="minibtns"><button class="px" data-aff="show">선택지 점수 ${DB.settings.showAff?'ON':'OFF'}</button></div></div>`);
   L.querySelectorAll('[data-aff]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();const A=affOf(),t=b.dataset.aff;
+    if(t==='show'){DB.settings.showAff=!DB.settings.showAff;save();b.textContent='선택지 점수 '+(DB.settings.showAff?'ON':'OFF');return;}
     A.v=t==='+3'?A.v+3:+t;A.acc=0;save();affDraw(A.v);toast(`${hn()} 호감도 ${A.v}`+(A.v===0&&!DB.locked?' · 나가면 화내고 떠나':''));});
   updateRoomPins();}
 function updateRoomPins(){const all=allSaved();const pc=pinnedCards(all,roomPins);const L=$('#roomList');L.classList.toggle('showdist',pc.length>0&&roomTab==='saved');
@@ -1062,9 +1064,16 @@ const AFF_TRAP={
   miyeon:'이미 부끄러워하는데 또 칭찬하기, 선배가 신나서 한 얘기를 시큰둥하게 넘기기, 선배 말을 무시하고 딴소리',
   sujeong:'과한 칭찬이나 아부, 쓸데없이 길고 들뜬 리액션, 뻔한 인사치레',
   mizuki:'다른 사람(특히 다른 여자) 얘기 꺼내기, 혼자 가겠다는 말, 미즈키의 한국어 실수를 지적하기'};
+/* trap kinds per heroine — each turn a few are drawn at random, so no single topic becomes the tell */
+const TRAP_POOL={
+  miyeon:['이미 부끄러워하는데 칭찬을 또 하기','선배가 신나서 한 얘기를 시큰둥하게 넘기기','선배 말을 무시하고 딴소리','선배의 허당을 진지하게 지적하기','선배 대신 다 해주겠다고 나서기(선배 체면이 구겨짐)','들뜬 선배에게 피곤하다고 찬물 끼얹기','선배 얘기를 끊고 자기 얘기만 하기'],
+  sujeong:['과한 칭찬이나 아부','쓸데없이 길고 들뜬 리액션','뻔한 인사치레','선배 말에 오버해서 감동하기','선배 기분을 꼬치꼬치 캐묻기','"선배는 쿨하잖아요" 식으로 선배를 단정하기','억지 애교'],
+  mizuki:['다른 사람 얘기 꺼내기','혼자 있고 싶다는 말','미즈키의 한국어 실수를 지적하기','일본에 대한 뻔한 고정관념','미즈키 말을 건성으로 흘려듣기','다음 약속을 애매하게 미루기','미즈키를 어린애 취급하기','다른 일정이 더 중요하다는 듯한 말']};
+function trapKinds(n){const pool=(TRAP_POOL[DB.settings.hero||'miyeon']||TRAP_POOL.miyeon).slice(),out=[];
+  while(out.length<n&&pool.length)out.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);return out;}
 const AFF_TASTE={
   miyeon:'잘 받아주는 장난, 허당을 귀엽게 감싸주는 말, 엉뚱한 말에 기뻐해. 놀려서 발끈하게 만들어도 결국 좋아해. 같은 칭찬이 반복되면 부끄러워서 도망가고 싶어 해(소폭 마이너스). 무시하거나 시큰둥하면 서운해.',
-  sujeong:'담백한 말, 재치 있는 한마디, 진지하게 들어주는 태도를 좋아해. 아부나 과한 칭찬은 오히려 깎여. 쉽게 오르지 않아(점수를 짜게 줘).',
+  sujeong:'담백한 말, 재치 있는 한마디, 진지하게 들어주는 태도를 좋아해. 아부나 과한 칭찬은 오히려 깎여. ',
   mizuki:'관심, 자기만 봐주는 느낌, 한국어 실수를 귀엽게 받아주는 말을 좋아해. 다른 사람(특히 다른 여자) 얘기는 크게 깎여. 실수를 놀리면 발끈하지만 장난이 귀여우면 오를 수도 있어.'};
 /* her hidden mood of the day (one per heroine, re-rolled each local day) — it bends what she likes today */
 const MOODS={
@@ -1084,6 +1093,8 @@ function moodRule(){const m=todayMood(DB.settings.hero||'miyeon');
   return `[오늘 ${hn()}의 속기분 — 절대 직접 말하지 말 것(기분 이름·"오늘 예민해" 같은 말 금지). 말투에만 은근히 묻어나게: ${MOOD_TONE[m]}] ${MOODS[m]}`;}
 /* the same kind of answer over and over wears thin: 3 in a row → it backfires */
 const KINDS=['tease','kind','agree','odd'];let PICKED=[];
+function affPreview(c){let n=1;for(let i=PICKED.length-1;i>=0&&PICKED[i]===c.k;i--)n++;let a=c.aff;if(c.k&&n>=3)a=Math.min(a,-0.15);
+  a=Math.max(-0.3,Math.min(0.3,a))*AFF_SCALE;return a<0?a*AFF_DOWN:a*AFF_UP;}
 function streakAff(c){PICKED=[...PICKED,c.k||'?'].slice(-6);let n=0;for(let i=PICKED.length-1;i>=0&&PICKED[i]===PICKED[PICKED.length-1];i--)n++;
   if(c.k==null||c.k==='?')return c.aff;
   if(n>=3)return Math.min(c.aff,-0.15);return c.aff;}
@@ -1108,8 +1119,8 @@ ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
 ${C.noisy?`[방금 일어난 일] 둘이 너무 떠들었는지, 골목 건너편 건물 창문에서 런닝셔츠 차림의 아저씨가 몸을 쑥 내밀고 시끄럽다며 허공에 주먹을 몇 번 휘두르고 들어갔어. 이번 대사는 먼저 그 일에 ${hn()}의 성격대로 반응해(예: "우, 우리가 너무 시끄러웠나?" 같은 느낌 — 그대로 베끼지 말고 자기 말투로, 목소리를 낮추거나 웃음을 참는 등). 그다음 후배가 한 말에 이어서 대화를 계속해.
-`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
-[선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
+`:''}[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${bye?' '+byeTask(bye)+' choices는 빈 배열, end는 true.':final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 ${C.traps}개는 ${hn()}의 성격과 오늘 기분상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정이 아닌 선택지가 최소 하나는 꼭 있어야 해${C.traps>=3?'(그래서 이번엔 선택지 4개)':C.traps===2?'(선택지 3~4개)':''}. 이번 함정 유형(함정마다 하나씩, 이것만 써): ${C.trapKinds.join(' / ')}. 함정은 소재만 봐서는 티 나지 않게 하고, 함정이 아닌 선택지에도 비슷한 소재를 섞어도 돼. 함정도 위의 후배 말투 규칙은 지켜.
+[선택지 점수] (점수 폭은 캐릭터 상관없이 똑같이) 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 함정이 아닌 선택지 중 성격과 오늘 기분에 맞는 말은 +0.1~0.3(딱 맞으면 0.3), 무난한 말은 +0.05 정도. 같은 말이라도 오늘 기분에 따라 점수가 달라져야 해.
 [선택지 결] 각 선택지에 k로 결을 붙여: 놀리거나 장난치는 말 "tease", 다정하거나 챙겨주는 말 "kind", 맞장구·질문 "agree", 엉뚱한 말 "odd".`}
 ${coldRule()}
 ${moodRule()}
@@ -1132,7 +1143,7 @@ const DEMO_CHAT=[
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['아, 아니 그게… 사진 얘기예요','뒤에 비둘기는 있어요','…네, 선배 말한 거예요']},
   {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['제가 지도 볼까요?','천재… 맞죠?','같이 헤매는 것도 괜찮아요']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
-async function chatAsk(final,bye){C.traps=1+Math.floor(Math.random()*3);
+async function chatAsk(final,bye){C.traps=1+Math.floor(Math.random()*3);C.trapKinds=trapKinds(C.traps);
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];const v=final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};v.choices=(v.choices||[]).map(t=>({t,aff:0,trap:false}));return v;}
   const r=await gemini(chatPrompt(final,bye),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   let v=chatParse(r.text);
@@ -1165,7 +1176,7 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
     const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
       if(C.byeNow&&!v.bye){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;C.byeNow=false;chatByeNow();};return;}
       if(!last){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;pi++;typeOne();};return;}
-      if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c.t)}</button>`).join('')+'</div>');
+      if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c.t)}${DB.settings.showAff?(()=>{const x=affPreview(c);return `<span class="sc${x<0?' neg':''}">${x>=0?'+':''}${x.toFixed(2)}${c.trap?' 함정':''}${c.k?' '+({tease:'놀림',kind:'다정',agree:'맞장구',odd:'엉뚱'})[c.k]:''}</span>`;})():''}</button>`).join('')+'</div>');
         dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
       else if(v.bye){C.ended=false;C.byeReady=true;dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');}
       else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};

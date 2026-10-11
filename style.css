@@ -296,3 +296,5 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 #rebirth .dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
 #rebirth .box{position:absolute;left:12%;right:12%;top:40%;padding:18px 18px 12px;font-weight:700;font-size:16px;line-height:1.5;text-align:center}
 #rebirth .choices{justify-content:center}
+.choices.v .choice .sc{margin-left:auto;padding-left:6px;flex:none;font-size:11px;color:#8fe3a8;align-self:center}
+.choices.v .choice .sc.neg{color:#ff8f9c}
