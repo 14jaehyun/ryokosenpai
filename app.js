@@ -269,7 +269,7 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
-const AFF_SCALE=2,AFF_UP=1.6,AFF_DOWN=1.6*1.1;   // rise : drop = 1 : 1.1
+const AFF_SCALE=2,AFF_UP=1.6,AFF_DOWN=1.6;   // rise : drop = 1 : 1
 function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
