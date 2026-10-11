@@ -1,11 +1,11 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.22';
+const VERSION='2.0.24';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
 const DEFAULT_MODEL='gemini-3.5-flash-lite';
-const DEF={settings:{key:'',model:DEFAULT_MODEL,music:true},user:{name:''},chat:{recent:[]},
+const DEF={settings:{key:'',model:DEFAULT_MODEL,music:true,hero:'miyeon'},user:{name:''},chat:{recent:[]},
   profile:{done:false,situations:[],interests:[],free:'',stats:{}},groups:[],passed:[],routes:[],lastLoc:null};
 let DB;
 function load(){try{DB=JSON.parse(localStorage.getItem(LS))||{}}catch(e){DB={}}
@@ -15,7 +15,7 @@ function load(){try{DB=JSON.parse(localStorage.getItem(LS))||{}}catch(e){DB={}}
   DB.profile=Object.assign({},DEF.profile,DB.profile);DB.user=Object.assign({},DEF.user,DB.user);if(!DB.chat||!Array.isArray(DB.chat.recent))DB.chat={recent:[]};
   if(!Array.isArray(DB.routes))DB.routes=[];
   ['lastLoc','manualLoc'].forEach(k=>{if(DB[k])DB[k].label='';});
-  const now=Date.now();DB.passed=DB.passed.filter(p=>now-p.at<10*864e5);}
+  DB.passed=[];}
 function save(){try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
 load();
 
@@ -191,6 +191,20 @@ const S={mode:'idle',req:'',loc:null,area:'',queue:[],cards:[],pins:[],shownName
 const CARD_SLOTS=9,QUEUE_MIN=6;
 const mainEl=$('#main'),charEl=$('#char'),dlgWrap=$('#dlgWrap'),dlg=$('#dlg');
 
+/* ---------- heroines: same base personality + one extra trait each; picked in settings (default 미연) ---------- */
+const HEROES={
+  miyeon:{name:'미연',img:'miyeon.png',blush:'miyeon_blush.png',pos:{left:0,top:0,width:100},
+    trait:'추가 속성: 천연계·모에. 순진하고 천연스러운 반응, 가끔 엉뚱한 연상으로 말이 튀어. 감정이 얼굴에 그대로 드러나.'},
+  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-2.192,top:10,width:102.996},
+    trait:'추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
+  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-6.256,top:10,width:112.511},
+    trait:'추가 속성: 쿨뷰티. 말수가 적고 담담하고 간결해. 감정 표현을 아끼고 문장을 짧게 끊어. 그래서 가끔 허당이 드러나거나 수줍어할 때 반전 매력이 커.'}};
+function hero(){return HEROES[DB.settings.hero]||HEROES.miyeon;}
+const hn=()=>hero().name;
+const iya=n=>n+(hasBatchim(n)?'이야':'야');   // 미연이야 / 미즈키야 / 수정이야
+function applyHero(){const h=hero(),img=$('#charImg');img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
+  const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;}
+
 /* ---------- dialog ---------- */
 function say(html,{choices=null,cursor=true,active=false}={}){
   dlg.innerHTML=html+(choices?'<div class="choices">'+choices.map((c,i)=>`<button class="choice${i===0?' sel':''}" data-i="${i}">${esc(c.label)}</button>`).join('')+'</div>':'')+(cursor&&!choices?'<span class="cursor">▼</span>':'');
@@ -204,9 +218,8 @@ function showDlg(v){dlgWrap.classList.toggle('hidden',!v);}
 let blushCount=0,blushNext=8+Math.floor(Math.random()*5),blushing=false;
 function charTapped(x,y){const r=charEl.getBoundingClientRect();if(x<r.left+r.width*0.12||x>r.right||y<r.top||y>r.bottom)return false;
   blushCount++;if(blushCount>=blushNext&&!blushing){blushCount=0;blushNext=8+Math.floor(Math.random()*5);blushing=true;
-    const img=$('#charImg');img.src='miyeon_blush.png';setTimeout(()=>{img.src='miyeon.png';blushing=false;},2000);}
+    const img=$('#charImg');img.src=hero().blush;setTimeout(()=>{img.src=hero().img;blushing=false;},2000);}
   return true;}
-new Image().src='miyeon_blush.png';
 
 /* ---------- speech ---------- */
 const SRec=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -247,12 +260,12 @@ function typeInput(msg){S.mode='typing';
       if(listening&&st.chat)say('응? 어디 가고 싶은데? 말해봐.<div class="hint">손을 떼면 끝나.</div>',{cursor:false});
       if(!listening){st=null;charEl.classList.remove('pressed');typeInput();}},chat?350:220);};
   const move=e=>{if(!st||listening||st.chat)return;const dy=e.clientY-st.y;
-    if(dy<-120){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
+    if(dy<-170){clearTimeout(holdT);holdT=null;st=null;charEl.classList.remove('pressed');toRoom();}};
   const up=async e=>{if(!st)return;const p=st;clearTimeout(holdT);st=null;charEl.classList.remove('pressed');
     if(holdT===null&&listening){listening=false;S.mode='busy';const txt=await stopListen();if(txt)gotText(txt);else{S.mode='idle';say('어… 잘 못 들었어.<br>꾹 누른 채로 다시 말해줄래?');}}
-    else if(p.chat){if(S.mode==='chat'&&p.dlg&&!p.choice&&e.type==='pointerup')chatTap();}
+    else if(p.chat){if(S.mode==='chat'&&e.type==='pointerup'){if(!p.dlg)endChat();else if(!p.choice)chatTap();}}
     else if(S.mode==='idle'&&e.type==='pointerup'){if(p.dlg)startChat();
-      else if(!charTapped(p.x,p.y))say('화면을 <span class="q">꾹 누른 채로</span> 말해줘.<div class="hint">위로 밀면 보관함으로 가. 대사창을 누르면 나랑 수다 떨 수 있어.</div>');}
+      else if(!charTapped(p.x,p.y))say('화면을 <span class="q">꾹 누른 채로</span> 말해줘.<div class="hint">위로 밀면 보관함으로 가.</div>');}
     holdT=null;};
   [$('#touch'),dlgWrap].forEach(el=>{el.addEventListener('pointerdown',down);el.addEventListener('pointermove',move);
     el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);});
@@ -277,7 +290,7 @@ function gpsLoc(force){return new Promise(res=>{LOCERR='';
   const cached=DB.lastLoc&&Date.now()-DB.lastLoc.at<(force?0:10*60e3)?DB.lastLoc:null;
   if(!navigator.geolocation){LOCERR='이 기기에선 위치를 쓸 수 없어.';return res(cached);}
   navigator.geolocation.getCurrentPosition(p=>{const l={lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy||0),at:Date.now(),label:DB.lastLoc&&distM(DB.lastLoc,{lat:p.coords.latitude,lng:p.coords.longitude})<300?DB.lastLoc.label:''};
-      DB.lastLoc=l;save();res(l);},
+      DB.lastLoc=l;save();res(l);try{dayNight(false);}catch(e){}},
     err=>{LOCERR=err.code===1?'위치 권한이 꺼져 있어. 아이폰 설정 › 개인정보 보호 및 보안 › 위치 서비스 › Safari 웹사이트를 "앱을 사용하는 동안"으로 바꿔줘.':err.code===3?'위치 받는 데 너무 오래 걸렸어. 다시 해볼래?':'지금 위치를 확인할 수가 없어.';
       res(DB.lastLoc&&Date.now()-DB.lastLoc.at<30*60e3?DB.lastLoc:null);},
     {enableHighAccuracy:true,timeout:12000,maximumAge:force?0:60000});});}
@@ -298,14 +311,14 @@ ${profileText()}
 [제외] 이미 보여준 곳: ${S.shownNames.slice(-40).join(', ')||'없음'}
 규칙:
 - 요청에 지역·시간이 있으면 그 기준, 없으면 현재 위치와 지금 시각 기준.
-- 그 시간에 실제로 이용할 수 있는 곳만. Google 지도에서 확인되지 않거나 폐업한 곳은 빼라.
+- 되도록 지금 영업 중인 곳 위주로. Google 지도에서 확인되지 않거나 폐업한 곳은 빼라. hours는 Google 지도에 나온 오늘 요일의 영업시간 그대로.
 - 해외라면 현지인이 실제로 가는 곳을 우선.
 - 코스나 일정이 아니라 서로 독립적인 '할 거리'.
 - kind "taste" ${nT}개: 취향에 잘 맞는 곳. kind "random" ${nR}개: 평소 취향과 반대 결의 의외인 곳(그래도 근처에서 지금 가능).
 - line1·line2는 존댓말 말고 짧은 반말이나 명사형으로.
 - mapsTitle은 Google 지도에 등록된 이름을 글자 그대로(현지어 그대로) 적어라. address는 Google 지도의 주소 그대로.
 출력은 설명 없이 JSON 배열만:
-[{"name":"한국어 표시 이름","mapsTitle":"Google 지도 등록 이름 그대로","address":"Google 지도 주소 그대로","line1":"한 줄 설명 18자 안팎","line2":"한 줄 설명 20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":["현금만","흡연 가능","예약 필요" 같은 주의사항, 최대 3개, 없으면 빈 배열],"area":"지역명 예: 서울 용산"}]`;}
+[{"name":"한국어 표시 이름","mapsTitle":"Google 지도 등록 이름 그대로","address":"Google 지도 주소 그대로","line1":"한 줄 설명 18자 안팎","line2":"한 줄 설명 20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간을 HH:MM-HH:MM 형식으로(구간이 여러 개면 쉼표로, 자정 넘으면 예: 18:00-02:00), 24시간이면 24시간, 오늘 휴무면 휴무, 모르면 빈 문자열","open":true,"tags":["현금만","흡연 가능","예약 필요" 같은 주의사항, 최대 3개, 없으면 빈 배열],"area":"지역명 예: 서울 용산"}]`;}
 /* loading readout: stage + elapsed, shown in small dark-green text under the window only while a finger is on the screen */
 const LD={stage:'',t0:0,timer:null,held:false};
 function setStage(t){LD.stage=t;drawLdInfo();}
@@ -390,7 +403,7 @@ ${list}
 ${String(ctxText||'').slice(0,2500)}
 규칙: 번호마다 정확히 하나. "title"에는 목록의 장소 이름을 글자 그대로 옮겨 적고, 설명은 반드시 그 장소에 대한 것만. 주소·좌표·영업시간은 Google 지도에 나온 그대로. 설명 두 줄은 이 장소가 어떤 곳인지 구체적으로(빈칸 금지). 취향과 반대 결인 곳 ${nR}개 정도는 kind "random".
 출력은 JSON 배열만:
-[{"i":0,"title":"목록의 이름 그대로","name":"한국어 표시 이름","address":"Google 지도 주소","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
+[{"i":0,"title":"목록의 이름 그대로","name":"한국어 표시 이름","address":"Google 지도 주소","line1":"18자 안팎","line2":"20자 안팎","kind":"taste 또는 random","category":"${CATS} 중 하나","lat":0.0,"lng":0.0,"hours":"오늘 영업시간을 HH:MM-HH:MM 형식으로(구간이 여러 개면 쉼표로, 자정 넘으면 예: 18:00-02:00), 24시간이면 24시간, 오늘 휴무면 휴무, 모르면 빈 문자열","open":true,"tags":[],"area":"지역명 예: 서울 용산"}]`;
   let arr=null;
   try{const r=await gemini(p,S.loc,{timeout:40000});arr=jsonArr(r.text);}catch(e){if(/한도|결제|API 키/.test(e.message))throw e;}
   if(!arr){const r=await gemini(p,null,{tools:false,timeout:30000});arr=jsonArr(r.text)||[];}
@@ -497,8 +510,17 @@ function fly(wrap,card,dir,cb){SFX.swipe();card.style.transition='transform .18s
     requestAnimationFrame(()=>{wrap.style.height='0px';wrap.style.marginBottom='0px';});setTimeout(cb,170);},180);}
 
 /* ---------- cards screen ---------- */
+/* open now? computed from today's hours (device clock = local time while travelling). true / false / null (unknown) */
+function openNow(c){const h=String(c.hours||'').trim();if(!h)return null;
+  if(/24\s*시간|24\s*h|00:00\s*[-~–]\s*(24|00):00/i.test(h))return true;
+  if(/휴무|휴업|定休|closed/i.test(h))return false;
+  const now=new Date(),m=now.getHours()*60+now.getMinutes();let any=false;
+  for(const r of h.matchAll(/(\d{1,2})[:시](\d{2})?\s*[-~–]\s*(\d{1,2})[:시](\d{2})?/g)){any=true;
+    const a=(+r[1])*60+(+(r[2]||0));let b=(+r[3])*60+(+(r[4]||0));if(b<=a)b+=1440;
+    if((m>=a&&m<b)||(m+1440>=a&&m+1440<b))return true;}
+  return any?false:null;}
 function cardHTML(c,extra=''){return `<div class="cw" data-id="${c.id}"><div class="under save">저장</div><div class="under pass">패스</div>
-  <div class="card px" data-id="${c.id}">${PIN_SVG}<div class="t"><span>${esc(c.name)}</span>${c.kind==='random'?'<span class="odd">의외</span>':''}</div>
+  <div class="card px${openNow(c)===false?' isclosed':''}" data-id="${c.id}">${PIN_SVG}<div class="t"><span>${esc(c.name)}</span>${c.kind==='random'?'<span class="odd">의외</span>':''}${openNow(c)===false?'<span class="closed">영업 종료</span>':''}</div>
   ${c.line1?`<div class="l">${esc(c.line1)}</div>`:''}${c.line2?`<div class="l">${esc(c.line2)}</div>`:''}<span class="dist"></span>${extra}</div></div>`;}
 function showCards(){S.mode='cards';$('#cardLayer').classList.remove('hidden');$('#reqTitle').textContent=S.area?`${S.area} · ${S.req}`:S.req;renderCards();}
 function renderCards(){const L=$('#cardList');const st=L.scrollTop;L.innerHTML=S.cards.map(c=>cardHTML(c)).join('');
@@ -521,7 +543,7 @@ function ensureGroup(){let g=DB.groups.find(x=>x.id===S.groupId);
   if(!g){g={id:uid(),request:S.req,date:Date.now(),area:S.area,cards:[]};DB.groups.unshift(g);S.groupId=g.id;}return g;}
 function removeCard(c,how){S.cards=S.cards.filter(x=>x.id!==c.id);S.pins=S.pins.filter(x=>x!==c.id);
   if(how==='save'){const g=ensureGroup();g.cards.push(c);stat(c,'save');}
-  else{DB.passed.unshift({card:c,groupId:S.groupId,request:S.req,area:S.area,date:Date.now(),at:Date.now()});stat(c,'skip',c.kind==='random'?0.3:1);}
+  else stat(c,'skip',c.kind==='random'?0.3:1);   // swiped left = gone
   save();const n=takeFromQueue();if(n)S.cards.push(n);renderCards();
   if(S.queue.length<QUEUE_MIN||S.cards.length<CARD_SLOTS){S.emptyRefills=0;refill();}}
 /* pull at list edges: top → onTop, bottom → onBottom */
@@ -529,8 +551,8 @@ function edgePull(listEl,onTop,onBottom){let y0=null,edge=null;
   listEl.addEventListener('touchstart',e=>{const atTop=listEl.scrollTop<=0,atBot=listEl.scrollTop+listEl.clientHeight>=listEl.scrollHeight-2;
     edge=atTop&&atBot?'both':atTop?'top':atBot?'bot':null;y0=edge?e.touches[0].clientY:null;},{passive:true});
   listEl.addEventListener('touchmove',e=>{if(y0==null)return;const dy=e.touches[0].clientY-y0;
-    if(dy>160&&onTop&&(edge==='top'||edge==='both')){y0=null;onTop();}
-    else if(dy<-160&&onBottom&&(edge==='bot'||edge==='both')){y0=null;onBottom();}},{passive:true});
+    if(dy>220&&onTop&&(edge==='top'||edge==='both')){y0=null;onTop();}
+    else if(dy<-220&&onBottom&&(edge==='bot'||edge==='both')){y0=null;onBottom();}},{passive:true});
   listEl.addEventListener('touchend',()=>{y0=null;},{passive:true});}
 function cardsResume(){S.mode='cards';charEl.classList.add('gone');setTimeout(()=>charEl.classList.remove('front'),700);$('#dimmer').classList.remove('on');setTimeout(()=>showDlg(false),10);}
 edgePull($('#cardList'),()=>{if(S.mode!=='cards')return;SFX.btn();S.mode='clearConfirm';
@@ -560,7 +582,7 @@ function openDetail(c){SFX.btn();const d=distM(S.loc,c);
   if(kr)btns.push('<button class="px" data-l="n">네이버<small>지도</small></button>','<button class="px" data-l="k">카카오<small>지도</small></button>');
   ov.innerHTML=`<div class="win px solid"><h3>${esc(c.name)}</h3>${placeTitle(c)&&placeTitle(c)!==c.name?`<div class="sub" style="margin-bottom:4px">${esc(placeTitle(c))}</div>`:''}
     <div class="sub">${esc(c.line1)}<br>${esc(c.line2)}</div><div class="sep"></div>
-    <div class="row" style="color:${c.open?'#6ee696':'#a0aacc'}">■ ${c.open?'영업 중':'영업 시간 확인'}${c.hours?' · '+esc(c.hours):''}</div>
+    ${(()=>{const o=openNow(c);return `<div class="row" style="color:${o===true?'#6ee696':o===false?'#ff9a8a':'#a0aacc'}">■ ${o===true?'영업 중':o===false?'영업 종료':'영업 시간 확인'}${c.hours?' · '+esc(c.hours):''}</div>`;})()}
     ${d!=null?`<div class="row">현재 위치에서 도보 ${walkMin(d)}분 · ${fmtKm(d)}</div>`:''}
     ${c.address?`<div class="sub" style="margin-top:6px">${esc(c.address)}</div>`:''}
     ${c.tags.length?`<div class="tags">${c.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:''}
@@ -652,16 +674,16 @@ function startDrag(e,el){e.preventDefault();e.stopPropagation();audio();const bo
   box.addEventListener('touchstart',e=>{if(e.target.closest('.h')||paging)return;s={x:e.touches[0].clientX,y:e.touches[0].clientY,top:box.scrollTop<=0,dx:0};horiz=false;box.style.transition='none';},{passive:true});
   box.addEventListener('touchmove',e=>{if(!s)return;const dx=e.touches[0].clientX-s.x,dy=e.touches[0].clientY-s.y;
     if(!horiz&&R.mode==='hist'&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.3)horiz=true;
-    if(horiz){const ni=R.idx+(dx<0?1:-1),edge=ni<0||ni>=DB.routes.length;const x=edge?dx*0.22:dx*0.9;s.dx=dx;
+    if(horiz){const edge=DB.routes.length<2;const x=edge?dx*0.22:dx*0.9;s.dx=dx;
       box.style.transform=`translateX(${x}px) rotate(${x/90}deg)`;box.style.opacity=String(1-Math.min(Math.abs(x)/500,.45));}
-    else if(dy>160&&s.top&&Math.abs(dy)>Math.abs(dx)){s=null;closeRoute();}},{passive:true});
+    else if(dy>220&&s.top&&Math.abs(dy)>Math.abs(dx)){s=null;closeRoute();}},{passive:true});
   box.addEventListener('touchend',()=>{if(!s)return;const dx=s.dx;s=null;if(!horiz)return;horiz=false;
-    const dir=dx<0?1:-1,ni=R.idx+dir;
-    if(Math.abs(dx)<60||ni<0||ni>=DB.routes.length){box.style.transition='transform .28s cubic-bezier(.3,1.6,.5,1),opacity .2s';box.style.transform='';box.style.opacity='';
-      if(Math.abs(dx)>=60){SFX.touch();toast(ni<0?'이게 제일 최근 동선이야':'더 지난 동선은 없어',1300);}return;}
+    const dir=dx<0?1:-1,n=DB.routes.length,ni=(R.idx+dir+n)%n;   // wraps around: last → first, first → last
+    if(Math.abs(dx)<60||n<2){box.style.transition='transform .28s cubic-bezier(.3,1.6,.5,1),opacity .2s';box.style.transform='';box.style.opacity='';
+      return;}
     pageHist(ni,dir);},{passive:true});})();
 let paging=false;
-async function pageHist(ni,dir){if(paging||ni<0||ni>=DB.routes.length)return;paging=true;const box=$('#rlist');SFX.swipe();
+async function pageHist(ni,dir){if(paging||DB.routes.length<2)return;ni=(ni+DB.routes.length)%DB.routes.length;paging=true;const box=$('#rlist');SFX.swipe();
   box.style.transition='transform .17s ease-in,opacity .17s';box.style.transform=`translateX(${-dir*110}%) rotate(${-dir*4}deg)`;box.style.opacity='0';await sleep(170);
   showHist(ni);box.scrollTop=0;box.style.transition='none';box.style.transform=`translateX(${dir*60}%)`;box.style.opacity='0';void box.offsetWidth;
   box.style.transition='transform .22s cubic-bezier(.2,1.3,.5,1),opacity .18s';box.style.transform='';box.style.opacity='';
@@ -675,27 +697,14 @@ function toRouteHistory(){if(!DB.routes.length){toast('아직 저장된 동선�
 let roomTab='saved',roomPins=[],sparkleId=null;
 function allSaved(){return DB.groups.flatMap(g=>g.cards);}
 function fmtDate(t){const d=new Date(t);return `${d.getMonth()+1}월 ${d.getDate()}일`;}
-function renderRoom(){const L=$('#roomList');$('#tabSaved').classList.toggle('on',roomTab==='saved');$('#tabPassed').classList.toggle('on',roomTab==='passed');
-  $('#tabSaved').textContent=`저장 ${allSaved().length}`;$('#tabPassed').textContent=`지나친 카드 ${DB.passed.length}`;
-  if(roomTab==='saved'){
-    if(!DB.groups.length){L.innerHTML='<div class="empty">아직 저장한 곳이 없어.<br>추천 카드를 오른쪽으로 밀면 여기 모여.</div>';}
-    else L.innerHTML=DB.groups.map(g=>`<div class="ghead${g.id===sparkleId?' sparkle':''}"><div class="gq">“${esc(g.request)}”</div><div class="gm">${fmtDate(g.date)}${g.area?' · '+esc(g.area):''}</div></div>`+
-      g.cards.map(c=>cardHTML(c).replace('class="cw"',`class="cw${c._spark?' sparkle':''}"`)).join('')).join('');
-    L.querySelectorAll('.cw').forEach(w=>{const c=allSaved().find(x=>x.id===w.dataset.id),card=w.querySelector('.card');
-      gestures(w,card,{onTap:()=>roomPin(c,card),onLong:()=>openDetail(c),onLeft:()=>{const g=DB.groups.find(x=>x.cards.includes(c));
-        g.cards=g.cards.filter(x=>x!==c);DB.passed.unshift({card:c,groupId:g.id,request:g.request,area:g.area,date:g.date,at:Date.now()});
-        if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
-    allSaved().forEach(c=>delete c._spark);sparkleId=null;save();
-  }else{
-    L.innerHTML='<div class="note">오른쪽으로 밀면 다시 저장돼. 10일 지나면 사라져.</div>'+(DB.passed.length?DB.passed.map(p=>{const left=Math.max(1,10-Math.floor((Date.now()-p.at)/864e5));
-      return cardHTML(p.card,`<span class="left${left<=2?' soon':''}">${left}일 남음</span>`).replace('<div class="under save">저장</div>','<div class="under save">되살리기</div>');}).join(''):'<div class="empty">지나친 카드가 없어.</div>');
-    L.querySelectorAll('.cw').forEach(w=>{const p=DB.passed.find(x=>x.card.id===w.dataset.id),card=w.querySelector('.card');
-      gestures(w,card,{onLong:()=>openDetail(p.card),onRight:()=>{DB.passed=DB.passed.filter(x=>x!==p);
-        let g=DB.groups.find(x=>x.id===p.groupId);if(!g){g={id:p.groupId||uid(),request:p.request,date:p.date||Date.now(),area:p.area||'',cards:[]};DB.groups.unshift(g);}
-        p.card._spark=true;g.cards.push(p.card);sparkleId=g.id;save();renderRoom();}});});
-    if(sparkleId){$('#tabSaved').classList.add('ringgold');setTimeout(()=>$('#tabSaved').classList.remove('ringgold'),3000);}
-  }
-  L.insertAdjacentHTML('beforeend',soundTestHTML());L.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{SFX.btn();soundTest(b.dataset.st);});
+function renderRoom(){const L=$('#roomList');roomTab='saved';
+  if(!DB.groups.length){L.innerHTML='<div class="empty">아직 저장한 곳이 없어.<br>추천 카드를 오른쪽으로 밀면 여기 모여.</div>';}
+  else L.innerHTML=DB.groups.map(g=>`<div class="ghead"><div class="gq">“${esc(g.request)}”</div><div class="gm">${fmtDate(g.date)}${g.area?' · '+esc(g.area):''}</div></div>`+
+    g.cards.map(c=>cardHTML(c).replace('<div class="under pass">패스</div>','<div class="under pass">삭제</div>')).join('')).join('');
+  /* swipe left in the room = delete for good (no more 'passed cards' tab) */
+  L.querySelectorAll('.cw').forEach(w=>{const c=allSaved().find(x=>x.id===w.dataset.id),card=w.querySelector('.card');
+    gestures(w,card,{onTap:()=>roomPin(c,card),onLong:()=>openDetail(c),onLeft:()=>{const g=DB.groups.find(x=>x.cards.includes(c));
+      g.cards=g.cards.filter(x=>x!==c);if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
   updateRoomPins();}
 function updateRoomPins(){const all=allSaved();const pc=pinnedCards(all,roomPins);const L=$('#roomList');L.classList.toggle('showdist',pc.length>0&&roomTab==='saved');
   if(roomTab==='saved')L.querySelectorAll('.card').forEach(el=>{const c=all.find(x=>x.id===el.dataset.id);if(!c)return;const pinned=roomPins.includes(c.id);
@@ -706,7 +715,6 @@ function roomPin(c,el){const pc=pinnedCards(allSaved(),roomPins);
   if(roomPins.includes(c.id)){roomPins=roomPins.filter(x=>x!==c.id);SFX.touch();updateRoomPins();return;}
   if(!selectable(c,pc))return;if(roomPins.length>=3){el.classList.remove('shake');void el.offsetWidth;el.classList.add('shake');return;}
   roomPins.push(c.id);SFX.pin();updateRoomPins();}
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{SFX.btn();roomTab=t.dataset.tab;roomPins=[];renderRoom();$('#roomList').scrollTop=0;});
 $('#roomRouteBtn').onclick=()=>{SFX.btn();const pc=pinnedCards(allSaved(),roomPins);const ov=document.createElement('div');ov.className='overlay';
   const req=(DB.groups.find(g=>g.cards.includes(pc[0]))||{}).request||'';
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px"><div class="tagname" style="background:var(--cream)">동선 짜기</div><div class="win px solid">
@@ -732,7 +740,7 @@ async function placeLabel(l){if(!l)return '';
     const out=[];parts.forEach(x=>{if(x&&!out.includes(x))out.push(x);});
     return out.join(' ')||(j.display_name||'').split(',').slice(0,3).reverse().join(' ').trim();}catch(e){return '';}}
 function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=document.createElement('div');ov.className='overlay';ov.style.alignItems='flex-start';ov.style.overflowY='auto';
-  let music=st.music!==false;
+  let music=st.music!==false,heroSel=st.hero||'miyeon';
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:400px;margin:calc(var(--sat) + 30px) 0 30px"><div class="tagname">설정</div><div class="win px solid">
     ${msg?`<div class="sub" style="color:var(--yel);margin-bottom:10px">${esc(msg)}</div>`:''}
     <div class="row" style="margin-top:4px">제미나이 API 키</div>
@@ -745,6 +753,9 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
     <div class="locbox" id="sLoc">확인 중…</div>
     <div class="minibtns"><button class="px" id="sLocRe">GPS로 다시 받기</button><button class="px" id="sLocFix">지도에서 고치기</button></div>
     <div class="minibtns"><button class="px" id="sLocMap">구글맵에서 보기</button><button class="px" id="sLocPaste">구글맵 좌표 붙여넣기</button></div>
+    <div class="sep"></div>
+    <div class="row" style="margin-top:0">함께 다닐 선배</div>
+    <div class="minibtns" id="sHero">${Object.entries(HEROES).map(([k,h])=>`<button class="px${k===heroSel?' gold':''}" data-h="${k}"${k===heroSel?' style="color:var(--dark)"':''}>${h.name}</button>`).join('')}</div>
     <div class="sep"></div>
     <button class="chk ${music?'on':'off'}" id="sMusic" style="margin-top:0"><i></i>배경음악</button>
     <div class="sep"></div>
@@ -773,6 +784,8 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
       box.querySelector('#cpOk').onclick=()=>{const p=parseLatLng(i.value);if(!p){toast('좌표를 못 찾았어. 37.5, 127.0 같은 숫자를 넣어줘');return;}box.remove();setManual(p.lat,p.lng);};};
     const p=parseLatLng(t);if(p)setManual(p.lat,p.lng);else ask();};
   ov.querySelector('#sReset').onclick=()=>{SFX.btn();openReset();};
+  ov.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{SFX.touch();heroSel=b.dataset.h;
+    ov.querySelectorAll('[data-h]').forEach(x=>{const on=x.dataset.h===heroSel;x.classList.toggle('gold',on);x.style.color=on?'var(--dark)':'';});});
   ov.querySelector('#sMusic').onclick=e=>{SFX.touch();music=!music;e.currentTarget.classList.toggle('on',music);e.currentTarget.classList.toggle('off',!music);};
   const keyIn=ov.querySelector('#sKey');
   ov.querySelector('#sPaste').onclick=async()=>{SFX.btn();let t='';
@@ -782,6 +795,7 @@ function openSettings(msg){S.mode='settings';const st=DB.settings;const ov=docum
   const close=()=>{ov.remove();showDlg(true);if(!DB.settings.key.trim()){sayIdle();return;}
     if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());else if(!DB.profile.done)startTutorial();else sayIdle();};
   ov.querySelector('#sSave').onclick=()=>{SFX.btn();DB.settings.key=keyIn.value.trim();DB.settings.model=ov.querySelector('#sModel').value.trim()||DEFAULT_MODEL;
+    if(heroSel!==DB.settings.hero){DB.settings.hero=heroSel;DB.chat={recent:[]};applyHero();}
     DB.settings.music=music;save();ambientSession();if(music)music_on();else BGM.stop();close();};
   ov.querySelector('#sClose').onclick=()=>{SFX.btn();close();};}
 function music_on(){music();}
@@ -835,7 +849,7 @@ const SITU=[
 const ROUNDS=[['볼 거리',['미술관','건축','야경','공연','박물관','자연·공원']],['먹을 거리',['커피','디저트','로컬 식당','시장','술집','길거리 음식']],
   ['할 거리',['운동','산책','쇼핑','체험·클래스','서점·음반','사진 찍기']]];
 function startTutorial(){S.mode='tutorial';const P=DB.profile;P.situations=[];P.interests=[];showDlg(true);
-  say((DB.user.name?esc(voc())+', 이제':'안녕! 난 미연이야. 이제')+' 취향을 조금만 알려줘.<br>선배가 딱 맞게 골라줄게.',{choices:[{label:'시작하기',fn:()=>situ(0)},{label:'건너뛰기',fn:finishTut}]});}
+  say((DB.user.name?esc(voc())+', 이제':'안녕! 난 '+iya(hn())+'. 이제')+' 취향을 조금만 알려줘.<br>선배가 딱 맞게 골라줄게.',{choices:[{label:'시작하기',fn:()=>situ(0)},{label:'건너뛰기',fn:finishTut}]});}
 function tutBox(html){const t=$('#tut');t.innerHTML=html;t.classList.remove('hidden');return t;}
 function situ(i){if(i>=SITU.length)return round(0);const [q,opts]=SITU[i];
   say(`이럴 땐 뭐가 끌려? <span style="color:var(--muted);font-weight:400">(${i+1}/5)</span>`,{cursor:false});
@@ -872,16 +886,19 @@ function demoCards(nT,nR){const out=[];let t=0,r=0;for(let k=0;k<DEMO.length*2&&
   if(!S.loc)S.loc={lat:35.6590,lng:139.7006,acc:20,at:Date.now()};return out;}
 
 /* ---------- chat with 미연 (AI picks her line + 3~4 answers for you) ---------- */
-const MIYEON=`너는 여행 추천 앱 "여행선배"의 캐릭터 '미연'이야. 사용자(후배)의 여행 선배.
+const HERO_BASE=`사용자(후배)의 여행 선배야.
 배경: 명문대에 다니는 여대생. 똑똑하고 아는 게 많아. 역사·지리·문화·언어 상식을 대화에 자연스럽게 섞고, 말이 논리적이고 재치 있어. 절대 멍청하거나 유치하게 말하지 마.
 모에 포인트: 순수하고 남을 먼저 배려해. 선배답게 의젓한 척하지만 생활 속에선 살짝 허당이야(길치, 덤벙대다 뭘 떨어뜨림, 자신만만하게 말했다가 사소한 디테일을 헷갈림 정도). 지식 자체는 정확해.
-자기가 예쁘고 인기 많다는 걸 전혀 몰라. 그래서 칭찬이나 설레는 말을 들으면 진심으로 당황하거나 엉뚱하게 받아들여(예: 자기 얘기가 아니라고 생각함).
+자기가 예쁘고 인기 많다는 걸 전혀 몰라. 그래서 칭찬이나 설레는 말을 들으면 진심으로 당황하거나 엉뚱하게 받아들여(예: 자기 얘기가 아니라고 생각함). 사실은 후배에게 호감이 있지만 티 내지 않으려 해.
 순수하고 착하지만, 후배가 놀리면 발끈할 때도 있어(투덜대거나 삐친 척하다가 금방 풀림).
-말투: 항상 반말. 대사는 1~2문장, 80자 이내. 이모지·이모티콘 금지. "헤헤", "앗", "음…" 같은 말버릇은 가끔만.
-대화가 길어져도 같은 말·같은 화제를 되풀이하지 마. 화제는 자연스럽게 옮겨가도 되고, 질문만 하지 말고 미연 자신의 생각이나 이야기도 해.
+말투: 항상 반말. 이모지·이모티콘 금지. "헤헤", "앗", "음…" 같은 말버릇은 가끔만.
+대사 길이: 짧은 것(한 문장), 중간 것(두 문장), 긴 것(서너 문장)을 섞어. 앞 대사들과 길이가 겹치지 않게 바꿔가. 길게 말할 땐 line에 앞부분, line2에 이어지는 말을 나눠 담아(각 90자 이내). 짧거나 중간이면 line2는 빈 문자열.
+대화가 길어져도 같은 말·같은 화제를 되풀이하지 마. 화제는 자연스럽게 옮겨가도 되고, 질문만 하지 말고 자기 생각이나 이야기도 해.
 여기서는 가벼운 수다만 해. 실제 가게나 장소 이름을 지어내지 마.`;
+const PROTAG=`후배(사용자, 남자)가 고르는 선택지의 성격: 소심하고 착하지만 은근 장난기가 있어. 선배에게 호감이 있지만, 선배가 자기를 좋아한다는 건 전혀 몰라. 설레는 말도 대놓고 하지 않고 수줍게 돌려 말해.`;
+function heroPrompt(){const h=hero();return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${h.name}'이야. ${HERO_BASE}\n${h.trait}\n${PROTAG}`;}
 function nameRule(){const n=DB.user.name;return n?`후배 이름은 "${n}". 대화 중에 가끔(매번은 말고) 이름으로 불러. 부를 때는 "${voc()}"처럼.`:'후배 이름은 몰라. 부를 일이 있으면 "후배"라고만.';}
-const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','미연이 요즘 연습하는 것'];
+const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','선배가 요즘 빠져 있는 것'];
 /* she can wrap up only after 3+ answers, then 10% chance each turn (avg ~12 answers), always by 30 */
 const CHAT_MIN=3,CHAT_P=0.1,CHAT_CAP=30;
 const chatShouldEnd=n=>n>=CHAT_CAP||(n>=CHAT_MIN&&Math.random()<CHAT_P);
@@ -892,24 +909,25 @@ function chatCtx(){const now=new Date();const loc=(manualLoc()||DB.lastLoc||{}).
     loc?`지금 있는 곳: ${loc}`:'',g?`후배가 최근 앱에 한 요청: "${g.request}"`:'',
     r?`최근에 짠 동선: ${r.items.map(c=>c.name).join(', ')}`:''].filter(Boolean).join('\n');}
 function chatPrompt(final){const first=!C.hist.length;
-  const log=C.hist.map(h=>(h.who==='m'?'미연: ':'후배: ')+h.text).join('\n');
+  const log=C.hist.map(h=>(h.who==='m'?hn()+': ':'후배: ')+h.text).join('\n');
   if(!DB.chat)DB.chat={recent:[]};
-  return `${MIYEON}
+  return `${heroPrompt()}
 ${nameRule()}
 [상황]
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?'미연이 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 미연이 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 미연에게 하는 반말 대사, 각 18자 이내. 서로 결이 다르게: 다정한 말, 미연을 놀리거나 장난치는 말, 미연을 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
+[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 반말 대사, 각 18자 이내, 위의 후배 성격대로. 서로 결이 다르게: 다정한 말, 선배를 살짝 놀리는 말, 수줍게 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
-JSON 하나만 출력: {"line":"미연 대사","mood":"normal","choices":["..."],"end":false}`;}
+JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":["..."],"end":false}`;}
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
+  v.line2=typeof v.line2==='string'?v.line2.trim():'';
   v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];return v;}catch(e){return null;}}
 const DEMO_CHAT=[
   {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배 덕분에 하나도 안 힘들어','암산 검산해 봐도 돼?','선배는 오늘도 예쁘다','다리 대신 바퀴 달고 싶어']},
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['선배 말한 거 맞아','뒤에 비둘기 있어','농담이야, 헤헤']},
-  {line:'헤헤, 아무튼 선배는 길 찾기 천재니까… 어, 근데 여기 어디지?',mood:'fluster',choices:['지도 앱 켜줄까?','천재 맞아?','같이 헤매도 재밌어']},
+  {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['지도 앱 켜줄까?','천재 맞아?','같이 헤매도 재밌어']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
 async function chatAsk(final){
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};}
@@ -927,24 +945,27 @@ async function chatStep(final){const gen=C.gen;C.busy=true;
     chatShow({line:'앗… 무슨 말 하려고 했는지 까먹었어. 헤헤.',mood:'fluster',choices:[],end:true},esc(e.message||''));return;}
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
-  C.hist.push({who:'m',text:v.line});
+  C.hist.push({who:'m',text:v.line+(v.line2?' '+v.line2:'')});
   v.end=final||v.choices.length<2;  // only we decide when it ends
   if(v.end)v.choices=[];chatShow(v);}
-function chatMood(m){const img=$('#charImg');img.src=m==='blush'?'miyeon_blush.png':'miyeon.png';
+function chatMood(m){const img=$('#charImg');img.src=m==='blush'?hero().blush:hero().img;
   if(m==='fluster'||m==='huff'){charEl.classList.remove('fluster','huff');void charEl.offsetWidth;charEl.classList.add(m);}}
 /* typewriter; tap the box to show the whole line at once */
-function chatShow(v,errHint){chatMood(v.mood);const text=v.line.trim();let i=0;
-  dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');
-  const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
-    if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c)}</button>`).join('')+'</div>');
-      dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
-    else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
-  C.finishTyping=done;
-  C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);}
+function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2||''].filter(Boolean);let pi=0;
+  const typeOne=()=>{const text=parts[pi],last=pi===parts.length-1;let i=0;
+    dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');C.more=null;
+    const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
+      if(!last){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;pi++;typeOne();};return;}
+      if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c)}</button>`).join('')+'</div>');
+        dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
+      else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
+    C.finishTyping=done;
+    C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);};
+  typeOne();}
 function chatPick(t){C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(chatShouldEnd(C.picks));}
-function chatTap(){if(C.typing){C.finishTyping();return;}if(C.ended)endChat();}
-function leaveChat(){C.gen++;C.ended=false;C.busy=false;if(C.typing){clearInterval(C.typing);C.typing=null;}
-  $('#charImg').src='miyeon.png';charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
+function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.ended)endChat();}
+function leaveChat(){C.gen++;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
+  $('#charImg').src=hero().img;charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
 function endChat(){leaveChat();SFX.btn();sayIdle();}
 
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
@@ -962,7 +983,7 @@ const hasBatchim=s=>{const c=String(s).charCodeAt(String(s).length-1);return c>=
 const isHangul=s=>{const c=String(s).charCodeAt(String(s).length-1);return c>=0xAC00&&c<=0xD7A3;};
 function voc(){const n=DB.user.name;if(!n)return '후배';return isHangul(n)?n+(hasBatchim(n)?'아':'야'):n;}
 function askName(next,msg){S.mode='naming';showDlg(true);
-  msg=msg||(DB.profile.done?'아 맞다, 우리 꽤 같이 다녔는데 나 아직 네 이름도 모르잖아.<br>이름이 뭐야?':'안녕! 난 미연이야. 여행은 선배한테 맡겨.<br>근데 너, 이름이 뭐야?');
+  msg=msg||(DB.profile.done?'아 맞다, 우리 꽤 같이 다녔는데 나 아직 네 이름도 모르잖아.<br>이름이 뭐야?':'안녕! 난 '+iya(hn())+'. 여행은 선배한테 맡겨.<br>근데 너, 이름이 뭐야?');
   say(msg+'<input id="nin" maxlength="10" enterkeyhint="done" autocomplete="off" placeholder="이름"><div class="choices"><button class="choice sel" id="nok">확인</button></div>',{cursor:false,active:true});
   const i=$('#nin');setTimeout(()=>i.focus(),50);
   const ok=()=>{const v=i.value.trim().slice(0,10);if(!v){i.focus();return;}SFX.btn();i.blur();
@@ -979,7 +1000,7 @@ function openReset(){const ov=document.createElement('div');ov.className='overla
   ov.innerHTML=`<div style="position:relative;width:100%;max-width:380px"><div class="tagname">초기화</div><div class="win px solid">
     <div class="small" style="margin-top:0">무엇을 지울지 골라줘. 지운 건 되돌릴 수 없어.</div>
     <button class="chk on" data-o="me"><i></i>이름·취향 (처음 만난 것처럼 다시)</button>
-    <button class="chk off" data-o="box"><i></i>보관함·지나친 카드·지난 동선</button>
+    <button class="chk off" data-o="box"><i></i>보관함·지난 동선</button>
     <button class="chk off" data-o="key"><i></i>API 키·모델</button>
     <div class="btnrow"><button class="px gold" id="rOk">초기화</button><button class="px" id="rNo" style="color:var(--muted)">취소</button></div></div></div>`;
   $('#overlayHost').appendChild(ov);
@@ -995,13 +1016,35 @@ function openReset(){const ov=document.createElement('div');ov.className='overla
 function soundTestHTML(){return `<div class="stest"><div class="note">소리 실험 · 소리가 작아졌을 때 하나씩 눌러보고, 돌아오는 버튼을 알려줘.</div>
   <div class="minibtns"><button class="px" data-st="A">A 재생 모드</button><button class="px" data-st="B">B 오디오 요소</button><button class="px" data-st="C">C 무음 재생</button></div></div>`;}
 
+/* ---------- day / night background: sunrise & sunset at your location (NOAA formula, no network) ---------- */
+function sunTimes(lat,lng,d){const rad=Math.PI/180,J=d.getTime()/864e5+2440587.5,n=Math.round(J-2451545.0009+lng/360);
+  const Js=2451545.0009-lng/360+n,M=(357.5291+0.98560028*(Js-2451545))%360,Cc=1.9148*Math.sin(M*rad)+0.02*Math.sin(2*M*rad)+0.0003*Math.sin(3*M*rad);
+  const L=(M+102.9372+Cc+180)%360,Jt=Js+0.0053*Math.sin(M*rad)-0.0069*Math.sin(2*L*rad),dec=Math.asin(Math.sin(L*rad)*Math.sin(23.44*rad));
+  const cw=(Math.sin(-0.833*rad)-Math.sin(lat*rad)*Math.sin(dec))/(Math.cos(lat*rad)*Math.cos(dec));
+  if(cw>1)return {polar:'night'};if(cw<-1)return {polar:'day'};
+  const w=Math.acos(cw)/rad/360,toDate=j=>new Date((j-2440587.5)*864e5);return {rise:toDate(Jt-w),set:toDate(Jt+w)};}
+/* returns [isNight, ms until the next switch] */
+function dayState(){const now=new Date(),l=manualLoc()||DB.lastLoc||S.loc;
+  if(!l||l.lat==null){const h=now.getHours(),night=h<6||h>=19;const nx=new Date(now);nx.setHours(night?6:19,0,0,0);if(nx<=now)nx.setDate(nx.getDate()+1);return [night,nx-now];}
+  const t=sunTimes(l.lat,l.lng,now);if(t.polar)return [t.polar==='night',3600e3];
+  if(now<t.rise)return [true,t.rise-now];if(now<t.set)return [false,t.set-now];
+  const t2=sunTimes(l.lat,l.lng,new Date(now.getTime()+864e5));return [true,(t2.rise||now)-now];}
+let dnTimer=null;
+function dayNight(animate){const [night,ms]=dayState();
+  if(!animate)mainEl.classList.add('instant');mainEl.classList.toggle('night',night);
+  if(!animate){void mainEl.offsetWidth;requestAnimationFrame(()=>mainEl.classList.remove('instant'));}
+  clearTimeout(dnTimer);dnTimer=setTimeout(()=>dayNight(!document.hidden),Math.max(30e3,Math.min(ms+5e3,6*3600e3)));}  // one timer, set for the next sunrise/sunset
+new Image().src='bg_night.jpg';
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)dayNight(false);});
+
 /* ---------- boot ---------- */
+applyHero();dayNight(false);
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
 let lastTouch=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouch<300&&!e.target.closest('input'))e.preventDefault();lastTouch=n;},{passive:false});
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('input'))e.preventDefault();});
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
-if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 미연이야.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
+if(!DB.settings.key.trim()){showDlg(true);say('안녕! 난 네 여행선배 '+iya(hn())+'.',{cursor:false});setTimeout(()=>openSettings('처음이구나! 제미나이 API 키부터 넣어줘.'),600);}
 else if(!DB.user.name)askName(()=>DB.profile.done?sayIdle():startTutorial());
 else if(!DB.profile.done)startTutorial();
 else sayIdle();
