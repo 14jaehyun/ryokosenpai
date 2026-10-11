@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.24';
+const VERSION='2.0.25';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -195,9 +195,9 @@ const mainEl=$('#main'),charEl=$('#char'),dlgWrap=$('#dlgWrap'),dlg=$('#dlg');
 const HEROES={
   miyeon:{name:'미연',img:'miyeon.png',blush:'miyeon_blush.png',pos:{left:0,top:0,width:100},
     trait:'추가 속성: 천연계·모에. 순진하고 천연스러운 반응, 가끔 엉뚱한 연상으로 말이 튀어. 감정이 얼굴에 그대로 드러나.'},
-  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-2.192,top:10,width:102.996},
+  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-7.554,top:10,width:112.641},
     trait:'추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
-  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-6.256,top:10,width:112.511},
+  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-6.647,top:10,width:112.963},
     trait:'추가 속성: 쿨뷰티. 말수가 적고 담담하고 간결해. 감정 표현을 아끼고 문장을 짧게 끊어. 그래서 가끔 허당이 드러나거나 수줍어할 때 반전 매력이 커.'}};
 function hero(){return HEROES[DB.settings.hero]||HEROES.miyeon;}
 const hn=()=>hero().name;
@@ -895,7 +895,13 @@ const HERO_BASE=`사용자(후배)의 여행 선배야.
 대사 길이: 짧은 것(한 문장), 중간 것(두 문장), 긴 것(서너 문장)을 섞어. 앞 대사들과 길이가 겹치지 않게 바꿔가. 길게 말할 땐 line에 앞부분, line2에 이어지는 말을 나눠 담아(각 90자 이내). 짧거나 중간이면 line2는 빈 문자열.
 대화가 길어져도 같은 말·같은 화제를 되풀이하지 마. 화제는 자연스럽게 옮겨가도 되고, 질문만 하지 말고 자기 생각이나 이야기도 해.
 여기서는 가벼운 수다만 해. 실제 가게나 장소 이름을 지어내지 마.`;
-const PROTAG=`후배(사용자, 남자)가 고르는 선택지의 성격: 소심하고 착하지만 은근 장난기가 있어. 선배에게 호감이 있지만, 선배가 자기를 좋아한다는 건 전혀 몰라. 설레는 말도 대놓고 하지 않고 수줍게 돌려 말해.`;
+const PROTAG=`[후배(사용자, 남자) 선택지 규칙 — 반드시 지켜]
+성격: 소심하고 착하지만 은근 장난기가 있어. 선배에게 호감이 있지만 선배가 자기를 좋아한다는 건 전혀 몰라.
+말투: 선배에게 편한 존댓말(~요, ~어요, ~죠?). 극존대(~습니다, ~십니까)나 반말은 쓰지 마.
+설레는 말은 절대 대놓고 하지 못해. 말끝을 흐리거나("…", "아, 그냥요"), 다른 핑계를 대면서 수줍게 돌려 말해.
+장난은 소심하게 살짝 찌르는 정도. 다정한 말은 배려하지만 쭈뼛쭈뼛해.
+좋은 예: "그 옷… 잘 어울리는 것 같아요", "선배, 지도 거꾸로 든 거 알아요?", "다리 아프면 좀 쉬어요. …저도 쉬고 싶었어요", "참새도 길 잃을 때 있을까요?"
+금지: 작업 멘트·느끼한 말("니 얼굴이 지도잖아" 같은 것), 직설적인 외모 칭찬("오늘따라 예쁘네"), 스킨십 제안("손 잡아줄까"), 리드하거나 능글맞은 말투, 반말.`;
 function heroPrompt(){const h=hero();return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${h.name}'이야. ${HERO_BASE}\n${h.trait}\n${PROTAG}`;}
 function nameRule(){const n=DB.user.name;return n?`후배 이름은 "${n}". 대화 중에 가끔(매번은 말고) 이름으로 불러. 부를 때는 "${voc()}"처럼.`:'후배 이름은 몰라. 부를 일이 있으면 "후배"라고만.';}
 const CHAT_TOPICS=['오늘 날씨','배고픔이나 간식','오늘 얼마나 걸었는지','여행 사진','길을 헤맨 이야기','여행 짐','현지 말 한마디','기념품','피곤함과 잠','다음에 가고 싶은 곳','편의점','지도 보는 법','신발과 발','여행 중 작은 행운','선배가 요즘 빠져 있는 것'];
@@ -917,7 +923,7 @@ ${nameRule()}
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 반말 대사, 각 18자 이내, 위의 후배 성격대로. 서로 결이 다르게: 다정한 말, 선배를 살짝 놀리는 말, 수줍게 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
+[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정한 말, 선배를 살짝 놀리는 말, 수줍게 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
 JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":["..."],"end":false}`;}
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
@@ -925,9 +931,9 @@ function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)re
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
   v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];return v;}catch(e){return null;}}
 const DEMO_CHAT=[
-  {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배 덕분에 하나도 안 힘들어','암산 검산해 봐도 돼?','선배는 오늘도 예쁘다','다리 대신 바퀴 달고 싶어']},
-  {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['선배 말한 거 맞아','뒤에 비둘기 있어','농담이야, 헤헤']},
-  {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['지도 앱 켜줄까?','천재 맞아?','같이 헤매도 재밌어']},
+  {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배랑 다녀서 안 힘들었어요','그 암산… 검산해 봐도 돼요?','오늘… 사진 잘 나오겠네요. 아, 그냥요','다리에 바퀴 달고 싶어요']},
+  {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['아, 아니 그게… 사진 얘기예요','뒤에 비둘기는 있어요','…네, 선배 말한 거예요']},
+  {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['제가 지도 볼까요?','천재… 맞죠?','같이 헤매는 것도 괜찮아요']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
 async function chatAsk(final){
   if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};}
