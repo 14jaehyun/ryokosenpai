@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.5';
+const VERSION='2.1.6';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -241,7 +241,7 @@ function affRoll(from,to,dur,delay){const n=$('#affN'),up=to>from,len=Math.max(S
     if(st.animate)st.animate([{transform:`translateY(${a}px)`},{transform:`translateY(${b}px)`}],{duration:dur+k*25,delay,easing:'cubic-bezier(.3,1.45,.55,1)',fill:'forwards'});}
   setTimeout(()=>affDraw(to),delay+dur+len*25+400);}
 function affShow(){const h=$('#affH');if(h&&!h.firstChild)h.innerHTML=AFF_SVG;affDraw(affOf().v);}
-function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();
+function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)return;A.v=to;save();affBusyUntil=Date.now()+1500;
   const h=$('#affH');if(!h||!h.animate){affDraw(to);return;}
   if(d>0){SFX.affUp();
     h.animate([{transform:'none'},{transform:'scale(1.25,.75)',offset:.14},{transform:'translateY(-22px) scale(.85,1.18)',offset:.42},{transform:'translateY(-24px) scale(.95,1.05)',offset:.55},
@@ -250,7 +250,7 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
   else{setTimeout(()=>SFX.affDown(),180);
     h.animate([{transform:'none'},{transform:'translateY(-6px) scale(.95,1.05)',offset:.1},{transform:'translateY(16px) scale(1.25,.85)',offset:.28},{transform:'translateY(16px) scale(1.2,.88)',offset:.46},
       {transform:'translateY(-10px) scale(.88,1.14)',offset:.7},{transform:'translateY(0) scale(1.06,.95)',offset:.87},{transform:'none'}],{duration:760,easing:'ease-in-out'});
-    h.querySelector('svg').animate([{filter:'none'},{filter:'none',offset:.22},{filter:'grayscale(1) brightness(.85)',offset:.3},{filter:'grayscale(1) brightness(.85)',offset:.5},{filter:'none',offset:.75},{filter:'none'}],{duration:760,easing:'ease-out'});
+    h.querySelector('svg').animate([{filter:'none'},{filter:'none',offset:.099},{filter:'grayscale(1) brightness(.55)',offset:.1},{filter:'grayscale(1) brightness(.55)',offset:.46},{filter:'none',offset:.461},{filter:'none'}],{duration:760,easing:'linear'});   // gray as it starts to fall, pink the moment it bounces up
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
@@ -259,6 +259,12 @@ function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
   setTimeout(()=>affBump(d),450);}
+/* idle beat: every 15s the heart shrinks a little, then springs back past full size and settles */
+let affBusyUntil=0;
+function affBeat(){const h=$('#affH'),a=$('#aff');if(!h||!h.animate||document.hidden||!a||a.classList.contains('hidden')||SCREEN!=='main'||Date.now()<affBusyUntil)return;
+  h.animate([{transform:'none'},{transform:'scale(.84)',offset:.28,easing:'ease-in'},{transform:'scale(1.16)',offset:.55,easing:'ease-out'},
+    {transform:'scale(.95)',offset:.75},{transform:'scale(1.03)',offset:.88},{transform:'none'}],{duration:620,easing:'ease-in-out'});}
+setInterval(affBeat,15000);
 function applyHero(){const h=hero(),img=$('#charImg');affShow();img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
   const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;}
 
