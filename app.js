@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.3';
+const VERSION='2.1.4';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -224,7 +224,10 @@ const iya=n=>n+(hasBatchim(n)?'이야':'야');   // 미연이야 / 미즈키야 
 const AFF_SVG=(()=>{const H=["..##.##..",".#######.","#########","#########",".#######.","..#####..","...###...","....#...."],HI=['2,1','1,2'];let r='';
   H.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==='#')r+=`<rect x="${x*4}" y="${y*4}" width="4" height="4" fill="${HI.includes(x+','+y)?'#ffd1e0':'#ff6f9c'}"/>`;}));
   return `<svg width="36" height="32" viewBox="0 0 36 32" shape-rendering="crispEdges">${r}</svg>`;})();
-function affOf(){DB.aff=DB.aff||{};const k=DB.settings.hero||'miyeon';return DB.aff[k]||(DB.aff[k]={v:0,acc:0});}
+const AFF_START=50;
+function affOf(){DB.aff=DB.aff||{};
+  if(!DB.affBase){Object.values(DB.aff).forEach(a=>{a.v=(a.v||0)+AFF_START;});DB.affBase=1;}   // older saves started at 0
+  const k=DB.settings.hero||'miyeon';return DB.aff[k]||(DB.aff[k]={v:AFF_START,acc:0});}
 const AFF_H=22;
 function affDraw(v){const n=$('#affN');if(!n)return;n.innerHTML=String(v).split('').map(c=>`<span class="d"><span class="s"><i>${c}</i></span></span>`).join('');}
 /* odometer: every digit rolls through the values it really passes */
@@ -251,7 +254,8 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
-function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0));A.acc=(A.acc||0)+x;
+const AFF_SCALE=4/3,AFF_DOWN=2;   // 10 turns per move → 7.5; a drop counts twice a rise (raising her is the hard part)
+function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;A.acc=(A.acc||0)+x;
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
   setTimeout(()=>affBump(d),450);}
@@ -1020,13 +1024,26 @@ const PROTAG=`[후배(사용자, 남자) 선택지 규칙 — 반드시 지켜]
 설레는 말은 절대 대놓고 하지 못해. 말끝을 흐리거나("…", "아, 그냥요"), 다른 핑계를 대면서 수줍게 돌려 말해.
 장난은 소심하게 살짝 찌르는 정도. 다정한 말은 배려하지만 쭈뼛쭈뼛해.
 좋은 예: "그 옷… 잘 어울리는 것 같아요", "선배, 지도 거꾸로 든 거 알아요?", "다리 아프면 좀 쉬어요. …저도 쉬고 싶었어요", "참새도 길 잃을 때 있을까요?"
-금지: 작업 멘트·느끼한 말("니 얼굴이 지도잖아" 같은 것), 직설적인 외모 칭찬("오늘따라 예쁘네"), 스킨십 제안("손 잡아줄까"), 리드하거나 능글맞은 말투, 반말.`;
+금지: 작업 멘트·느끼한 말("니 얼굴이 지도잖아" 같은 것), 직설적인 외모 칭찬("오늘따라 예쁘네"), 리드하거나 능글맞은 말투, 반말.
+특히 금지: 신체 접촉에 관한 말은 어떤 형태로도 쓰지 마(손 잡기·안기·업기·기대기·팔짱 등). 제안도, 질문도, 농담도 안 돼("손 잡아줄까요?", "제 손 잡으면 부끄러워요?" 같은 것). 선배가 부끄러워하는 걸 일부러 떠보거나 들이대는 말도 금지. 이 후배는 소심해서 그런 말을 꺼낼 엄두도 못 내.`;
 function heroPrompt(){const h=hero();return `너는 여행 추천 앱 "여행선배"의 캐릭터 '${h.name}'이야. ${HERO_BASE}\n${h.trait}\n${PROTAG}`;}
 /* 미즈키's Korean slips: the app rolls the dice (≈1 line in 5) so they stay rare and random */
 function slipRule(){if((DB.settings.hero||'miyeon')!=='mizuki')return '';
   return Math.random()<0.2?'[이번 대사 특별 지시] 한국어를 딱 한 군데만 살짝 틀려: 조사 실수(예: "선배를"→"선배가"), 일본어가 튀어나옴(예: "아노…", "에?", "스고이… 아니, 대박!"), 일본어 직역 표현(예: "배가 비었어") 중 하나. 틀린 걸 스스로 알아채고 얼굴 빨개지며 부끄러워해(이때 mood는 "blush"). 과장하지 말고 자연스럽게.'
     :'[이번 대사] 한국어 실수 없이 자연스럽게 말해. 일본어 섞지 마.';}
+/* who lets their feelings show, and how often (the app rolls the dice each turn)
+   him: almost never (1 in 150). her: never below 60; 60+ 1 in 50, 75+ 1 in 10, 90+ 1 in 2 */
+function loveRule(){const v=affOf().v,me=Math.random()<1/150;
+  const p=v>=90?1/2:v>=75?1/10:v>=60?1/50:0,her=Math.random()<p;
+  return [me?'[후배 선택지] 이번엔 선택지 중 딱 하나만, 후배가 선배를 좋아하는 마음이 아주 살짝 새어 나오는 말을 넣어(말끝 흐리며 바로 얼버무림).'
+           :'[후배 선택지] 후배는 극도로 소심해서 선배를 좋아하는 티를 전혀 못 내. 설레는 말·칭찬으로 호감을 드러내는 선택지는 넣지 마.',
+    her?`[${hn()}] 이번 대사에서는 후배에 대한 호감을 살짝 드러내(말하다 멈칫하거나, 무심코 진심이 새어 나왔다가 수습하는 정도).`
+       :`[${hn()}] 이번 대사에서는 후배에 대한 호감을 드러내지 마(설렌 티, 좋아하는 티, 은근한 고백 금지). 평소의 선배로만 대해.`].join('\n');}
 /* how each heroine takes the junior's last line — for the hidden affection judgment */
+const AFF_TRAP={
+  miyeon:'이미 부끄러워하는데 또 칭찬하기, 선배가 신나서 한 얘기를 시큰둥하게 넘기기, 선배 말을 무시하고 딴소리',
+  sujeong:'과한 칭찬이나 아부, 쓸데없이 길고 들뜬 리액션, 뻔한 인사치레',
+  mizuki:'다른 사람(특히 다른 여자) 얘기 꺼내기, 혼자 가겠다는 말, 미즈키의 한국어 실수를 지적하기'};
 const AFF_TASTE={
   miyeon:'잘 받아주는 장난, 허당을 귀엽게 감싸주는 말, 엉뚱한 말에 기뻐해. 놀려서 발끈하게 만들어도 결국 좋아해. 같은 칭찬이 반복되면 부끄러워서 도망가고 싶어 해(소폭 마이너스). 무시하거나 시큰둥하면 서운해.',
   sujeong:'담백한 말, 재치 있는 한마디, 진지하게 들어주는 태도를 좋아해. 아부나 과한 칭찬은 오히려 깎여. 쉽게 오르지 않아(점수를 짜게 줘).',
@@ -1051,15 +1068,17 @@ ${nameRule()}
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정한 말, 선배를 살짝 놀리는 말, 수줍게 칭찬하거나 설레게 하는 말, 엉뚱한 말.`}
-${first?'':`[속마음 점수] 후배가 방금 한 말을 ${hn()}의 성격으로 받아들였을 때 속으로 느끼는 호감 변화를 -0.3~0.3 사이 숫자로 매겨 aff에 넣어. 뻔하게 착한 말이라고 무조건 플러스가 아니야. ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 대부분은 -0.1~0.15 근처, 정말 마음에 들거나 싫을 때만 ±0.3에 가깝게.`}
+[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.`}
+${loveRule()}
+${first?'':`[속마음 점수] 후배가 방금 한 말을 ${hn()}의 성격으로 받아들였을 때 속으로 느끼는 호감 변화를 -0.3~0.3 사이 숫자로 매겨 aff에 넣어. 뻔하게 착한 말이라고 무조건 플러스가 아니야. ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 플러스는 짜게, 마이너스는 확실하게: 정말 성격에 딱 맞을 때만 플러스, 안 맞으면 분명히 마이너스, 무난하거나 착하기만 한 말은 0 근처. 대부분은 -0.15~+0.15 사이, 정말 마음에 들거나 싫을 때만 ±0.3에 가깝게.`}
 ${slipRule()}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
 JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":["..."],"end":false${first?'':',"aff":0'}}`;}
+const TOUCH_RE=/손\s*(을|이|좀)?\s*(잡|줘|내밀|주세|꼭)|잡아\s*줄|안아|업어|기대(도|요|세)|팔짱|어깨(를|에)\s*(빌|기대)|뽀뽀|키스|스킨십/;
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
-  v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).slice(0,4):[];
+  v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).filter(x=>!TOUCH_RE.test(x)).slice(0,4):[];
   v.aff=Number.isFinite(+v.aff)?+v.aff:null;return v;}catch(e){return null;}}
 const DEMO_CHAT=[
   {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배랑 다녀서 안 힘들었어요','그 암산… 검산해 봐도 돼요?','오늘… 사진 잘 나오겠네요. 아, 그냥요','다리에 바퀴 달고 싶어요']},
@@ -1145,7 +1164,7 @@ function openReset(){const ov=document.createElement('div');ov.className='overla
   ov.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{SFX.touch();const k=b.dataset.o;opt[k]=!opt[k];b.classList.toggle('on',opt[k]);b.classList.toggle('off',!opt[k]);});
   ov.querySelector('#rNo').onclick=()=>{SFX.btn();ov.remove();};
   ov.querySelector('#rOk').onclick=()=>{if(!opt.me&&!opt.box&&!opt.key){toast('지울 걸 하나 이상 골라줘');return;}SFX.btn();
-    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};DB.aff={};affShow();}
+    if(opt.me){DB.user={name:''};DB.profile=JSON.parse(JSON.stringify(DEF.profile));DB.chat={recent:[]};DB.aff={};DB.affBase=1;affShow();}
     if(opt.box){DB.groups=[];DB.passed=[];DB.routes=[];}
     if(opt.key){DB.settings.key='';DB.settings.model=DEFAULT_MODEL;}
     save();location.reload();};}
