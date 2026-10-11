@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.9';
+const VERSION='2.4.0';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -118,10 +118,10 @@ const SFX={
   btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);},
   /* affection: a soft "뾱" (snaps up) / "뽁" (duller, drops) with a short tail */
   affUp(){coinHit(1390,0,0.2,1,1);coinHit(1850,0.055,0.22,1,1);coinHit(2450,0.11,0.3,1,1);},   // the stat's 띠링 with one more note in front
-  affDown(){let t=0,g=0.16,v=0.3;for(let i=0;i<6;i++){coinHit(1500-i*40,t,v,0.5,0.5);t+=g;g*=0.62;v*=0.62;}},   // a coin bouncing to rest
+  affDown(){coinLow(520,470,0,0.32,1.0);coinLow(350,310,0.22,0.36,1.5);},   // 둥… 둥… two steps down
   /* running-total ticks: a two-hit metal "찰캉" going up, a coin bouncing to rest going down */
   coinUp(){coinHit(1850,0,0.22,1,1);coinHit(2450,0.055,0.3,1,1);},
-  coinDown(){coinHit(1500,0,0.3,0.5,0.5);coinHit(1300,0.16,0.22,0.5,0.5);},   // two dull notes going down
+  coinDown(){coinLow(520,470,0,0.34,1.3);},   // one low 둥…
   /* rebirth potion: a warm detuned pad that swells and rises, a wobbly "부웅~" glide, dreamy bells, a short echo */
   magic(){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const sr=a.sampleRate,n=Math.floor(sr*1.8),b=a.createBuffer(1,n,sr),o=b.getChannelData(0),T=Math.PI*2;
     const pad=[[130.8,.10],[196,.08],[261.6,.07],[329.6,.05],[392,.04]],ph=new Float64Array(pad.length*2);let gp=0;
@@ -141,6 +141,12 @@ function coinHit(f0,t0,vol,bright,decay){if(MICOPEN||AWAY)return;const a=audio()
     const o=a.createOscillator(),g=a.createGain();o.type='sine';o.frequency.value=f0*r;const v=vol*amp*0.35,d=dec*decay;
     g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(v,s+0.0015);g.gain.setTargetAtTime(0,s+0.0015,d);o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+d*6);});
   noise(t0+0.01,0.004,vol*0.4*bright,'highpass',3000);}
+/* a low, muffled coin that sags a little in pitch */
+function coinLow(f0,f1,t0,vol,decay){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const s=a.currentTime+t0+0.01;
+  [[1,1,0.35],[2.76,0.6,0.22],[5.40,0.08,0.12],[8.93,0.05,0.07]].forEach(([r,amp,dec])=>{
+    const o=a.createOscillator(),g=a.createGain();o.type='sine';o.frequency.setValueAtTime(f0*r,s);o.frequency.setTargetAtTime(f1*r,s,0.3);
+    const v=vol*amp*0.35,d=dec*decay;g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(v,s+0.0015);g.gain.setTargetAtTime(0,s+0.0015,d);
+    o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+d*6);});}
 function pop(f0,f1,dur,vol,tau){if(MICOPEN||AWAY)return;const a=audio();if(!a)return;
   [[0,1],[0.029,0.32],[0.043,0.1],[0.067,0.033]].forEach(([dt,g])=>{const s=a.currentTime+dt;
     [[1,1],[2,0.25]].forEach(([h,hv])=>{const o=a.createOscillator(),gn=a.createGain();o.type='sine';
@@ -289,9 +295,10 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
 const AFF_SCALE=2,AFF_UP=1.6,AFF_DOWN=1.6;   // rise : drop = 1 : 1
-function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;A.acc=(A.acc||0)+x;affStat(x,Math.abs(A.acc)>=1);
-  if(Math.abs(A.acc)<1){save();return;}
-  const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
+function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;else x*=AFF_UP;
+  /* the heart moves each time the running total crosses a whole number (now and then ×2~3, for no reason at all) */
+  const from=A.sum||0,steps=Math.floor(from+x)-Math.floor(from);affStat(x,steps!==0);
+  if(!steps)return;let d=steps;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
   setTimeout(()=>affBump(d),450);}
 function applyHero(){const h=hero(),img=$('#charImg');affShow();img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
   const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;if(h.blink)new Image().src=h.blink;}
