@@ -298,3 +298,7 @@ input{font:inherit;-webkit-user-select:text;user-select:text}
 #rebirth .choices{justify-content:center}
 .choices.v .choice .sc{margin-left:auto;padding-left:6px;flex:none;font-size:11px;color:#8fe3a8;align-self:center}
 .choices.v .choice .sc.neg{color:#ff8f9c}
+.simwin table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11px}
+.simwin th,.simwin td{padding:3px 2px;text-align:right;border-bottom:1px solid rgba(255,255,255,.12)}
+.simwin th:first-child,.simwin td:first-child{text-align:left}
+.simwin th{color:var(--gold);font-weight:700}

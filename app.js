@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.4';
+const VERSION='2.3.5';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -841,8 +841,9 @@ function renderRoom(){const L=$('#roomList');roomTab='saved';
       g.cards=g.cards.filter(x=>x!==c);if(!g.cards.length)DB.groups=DB.groups.filter(x=>x!==g);roomPins=roomPins.filter(x=>x!==c.id);save();renderRoom();}});});
   L.insertAdjacentHTML('beforeend',`<div class="stest"><div class="note">호감도 테스트 · 지금 캐릭터(${esc(hn())}) 기준</div>
     <div class="minibtns"><button class="px" data-aff="4">호감 4</button><button class="px" data-aff="0">호감 0</button><button class="px" data-aff="+3">+3</button></div>
-    <div class="minibtns"><button class="px" data-aff="show">선택지 점수 ${DB.settings.showAff?'ON':'OFF'}</button></div></div>`);
+    <div class="minibtns"><button class="px" data-aff="show">선택지 점수 ${DB.settings.showAff?'ON':'OFF'}</button><button class="px" data-aff="sim">난이도 시뮬레이션</button></div></div>`);
   L.querySelectorAll('[data-aff]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();const A=affOf(),t=b.dataset.aff;
+    if(t==='sim'){simChoices();return;}
     if(t==='show'){DB.settings.showAff=!DB.settings.showAff;save();b.textContent='선택지 점수 '+(DB.settings.showAff?'ON':'OFF');return;}
     A.v=t==='+3'?A.v+3:+t;A.acc=0;save();affDraw(A.v);toast(`${hn()} 호감도 ${A.v}`+(A.v===0&&!DB.locked?' · 나가면 화내고 떠나':''));});
   updateRoomPins();}
@@ -1085,11 +1086,12 @@ const MOOD_TONE={good:'평소보다 말이 많고 잘 웃어',touchy:'말끝이 
 function todayMood(k){const d=new Date(),day=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
   if(!DB.moods||DB.moods.day!==day){const ks=Object.keys(MOODS);DB.moods={day,m:{}};Object.keys(HEROES).forEach(h=>DB.moods.m[h]=ks[Math.floor(Math.random()*ks.length)]);save();}
   return DB.moods.m[k]||'good';}
-function coldRule(k){k=k||DB.settings.hero||'miyeon';const v=(DB.aff&&DB.aff[k]||{v:AFF_START}).v,nm=HEROES[k].name;
+function coldRule(k){if(SIM)return '';k=k||DB.settings.hero||'miyeon';const v=(DB.aff&&DB.aff[k]||{v:AFF_START}).v,nm=HEROES[k].name;
   const a=v<=4?`[지금 ${nm}의 마음] 후배에게 많이 실망해서 차가워졌어. 말이 짧고 퉁명스럽고 거리를 둬(성격대로). 그래도 대화는 이어가.`:'';
   const b=(DB.talks||0)<=2?`[관계] 후배와는 막 알게 된 사이야. 아직 서로 잘 몰라서 처음 만난 사람처럼 살짝 어색하고 조심스럽게 대해.`:'';
   return [a,b].filter(Boolean).join('\n');}
-function moodRule(){const m=todayMood(DB.settings.hero||'miyeon');
+let SIM=null;   // choice-score simulation in progress: {mood}
+function moodRule(){const m=SIM?SIM.mood:todayMood(DB.settings.hero||'miyeon');
   return `[오늘 ${hn()}의 속기분 — 절대 직접 말하지 말 것(기분 이름·"오늘 예민해" 같은 말 금지). 말투에만 은근히 묻어나게: ${MOOD_TONE[m]}] ${MOODS[m]}`;}
 /* the same kind of answer over and over wears thin: 3 in a row → it backfires */
 const KINDS=['tease','kind','agree','odd'];let PICKED=[];
@@ -1319,6 +1321,36 @@ function askName(next,msg){S.mode='naming';showDlg(true);
         say(lines[Math.floor(Math.random()*lines.length)],{choices:[{label:'잘 부탁해요',fn:next}]});}},
       {label:'아니요',fn:()=>askName(next,'앗, 다시. 이름이 뭐라고?')}]});};
   $('#nok').onclick=ok;i.onkeydown=e=>{if(e.key==='Enter')ok();};}
+
+/* ---------- test: generate choice sets for every heroine (2 per mood × 4 moods) and compare their scores ---------- */
+const SIM_HIST=[{who:'m',text:'오늘 진짜 많이 걸었다. 다리 안 아파?'},{who:'me',text:'괜찮아요. 선배는요?'}];
+async function simChoices(){if(SIM){toast('시뮬레이션 중이야');return;}
+  const key=DB.settings.key.trim().toLowerCase();if(!key||key==='demo'){toast('API 키가 있어야 돼');return;}
+  const keep={hero:DB.settings.hero,hist:C.hist,traps:C.traps,kinds:C.trapKinds},moods=Object.keys(MOODS),jobs=[];
+  for(const k of Object.keys(HEROES))for(const m of moods)for(let r=0;r<2;r++){
+    DB.settings.hero=k;SIM={mood:m};C.hist=SIM_HIST;C.traps=1+Math.floor(Math.random()*3);C.trapKinds=trapKinds(C.traps);
+    jobs.push({k,m,traps:C.traps,prompt:chatPrompt(false)});}
+  DB.settings.hero=keep.hero;C.hist=keep.hist;C.traps=keep.traps;C.trapKinds=keep.kinds;
+  const res=[];let done=0;const tick=()=>toast(`시뮬레이션 ${done}/${jobs.length}`,1500);tick();
+  const run=async j=>{try{const r=await gemini(j.prompt,null,{tag:'sim',tools:false,timeout:30000,config:{responseMimeType:'application/json',temperature:1.0}});
+      const v=chatParse(r.text);if(v&&v.choices.length)res.push({...j,choices:v.choices});}catch(e){}done++;if(done%6===0)tick();};
+  for(let i=0;i<jobs.length;i+=4)await Promise.all(jobs.slice(i,i+4).map(run));
+  SIM=null;showSim(res);}
+function showSim(res){const eff=a=>{a=Math.max(-0.3,Math.min(0.3,a))*AFF_SCALE;return a<0?a*AFF_DOWN:a*AFF_UP;},f=x=>(x>=0?'+':'')+x.toFixed(2),pc=x=>Math.round(x*100)+'%';
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+  const rows=Object.keys(HEROES).map(k=>{const R=res.filter(r=>r.k===k),all=R.flatMap(r=>r.choices),safe=all.filter(c=>!c.trap),trap=all.filter(c=>c.trap);
+    const best=R.map(r=>Math.max(...r.choices.map(c=>eff(c.aff)))),rnd=R.map(r=>avg(r.choices.map(c=>eff(c.aff))));
+    return `<tr><td>${HEROES[k].name}</td><td>${R.length}</td><td>${f(avg(rnd))}</td><td>${f(avg(best))}</td><td>${f(avg(safe.map(c=>eff(c.aff))))}</td><td>${pc(safe.length?safe.filter(c=>c.aff<0).length/safe.length:0)}</td><td>${f(avg(trap.map(c=>eff(c.aff))))}</td></tr>`;}).join('');
+  const byMood=Object.keys(MOODS).map(m=>`<tr><td>${({good:'기분좋음',touchy:'예민',bored:'심심',tired:'피곤'})[m]}</td>`+Object.keys(HEROES).map(k=>{const R=res.filter(r=>r.k===k&&r.m===m);
+    return `<td>${R.length?f(avg(R.map(r=>avg(r.choices.map(c=>eff(c.aff)))))):'-'}</td>`;}).join('')+'</tr>').join('');
+  const ov=document.createElement('div');ov.className='overlay';
+  ov.innerHTML=`<div style="position:relative;width:100%;max-width:380px"><div class="tagname">난이도 시뮬레이션</div><div class="win px solid simwin">
+    <div class="small" style="margin-top:0">실제 반영값(배수 포함) 기준. 같은 대화 상황으로 캐릭터마다 기분 4종 × 2번.</div>
+    <table><tr><th></th><th>세트</th><th>아무거나</th><th>최선</th><th>안전 평균</th><th>안전인데 -</th><th>함정</th></tr>${rows}</table>
+    <div class="small">기분별 '아무거나' 평균</div>
+    <table><tr><th></th>${Object.keys(HEROES).map(k=>`<th>${HEROES[k].name}</th>`).join('')}</tr>${byMood}</table>
+    <div class="btnrow"><button class="px gold" id="simOk">닫기</button></div></div></div>`;
+  $('#overlayHost').appendChild(ov);ov.querySelector('#simOk').onclick=()=>{SFX.btn();ov.remove();};}
 
 /* ---------- reset (from settings) ---------- */
 function openReset(){const ov=document.createElement('div');ov.className='overlay';
