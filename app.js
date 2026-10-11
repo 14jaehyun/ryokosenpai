@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.0.25';
+const VERSION='2.0.26';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -195,9 +195,9 @@ const mainEl=$('#main'),charEl=$('#char'),dlgWrap=$('#dlgWrap'),dlg=$('#dlg');
 const HEROES={
   miyeon:{name:'미연',img:'miyeon.png',blush:'miyeon_blush.png',pos:{left:0,top:0,width:100},
     trait:'추가 속성: 천연계·모에. 순진하고 천연스러운 반응, 가끔 엉뚱한 연상으로 말이 튀어. 감정이 얼굴에 그대로 드러나.'},
-  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-7.554,top:10,width:112.641},
+  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-8.681,top:10,width:116.054},
     trait:'추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
-  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-6.647,top:10,width:112.963},
+  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-9.194,top:10,width:118.566},
     trait:'추가 속성: 쿨뷰티. 말수가 적고 담담하고 간결해. 감정 표현을 아끼고 문장을 짧게 끊어. 그래서 가끔 허당이 드러나거나 수줍어할 때 반전 매력이 커.'}};
 function hero(){return HEROES[DB.settings.hero]||HEROES.miyeon;}
 const hn=()=>hero().name;
