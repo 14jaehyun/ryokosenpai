@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.4';
+const VERSION='2.1.5';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -254,7 +254,7 @@ function affBump(d){const A=affOf(),from=A.v,to=Math.max(0,from+d);if(to===from)
     affRoll(from,to,520,200);}}
 /* each chat answer is judged small (-0.3 ~ +0.3) and piles up out of sight; the number moves only when the pile reaches ±1
    (≈ once in 6~10 answers). Now and then a move is amplified ×2~3, for no reason at all. */
-const AFF_SCALE=4/3,AFF_DOWN=2;   // 10 turns per move → 7.5; a drop counts twice a rise (raising her is the hard part)
+const AFF_SCALE=2,AFF_DOWN=2;   // 10 turns per move → 5; a drop counts twice a rise (raising her is the hard part)
 function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))*AFF_SCALE;if(x<0)x*=AFF_DOWN;A.acc=(A.acc||0)+x;
   if(Math.abs(A.acc)<1){save();return;}
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
@@ -1068,18 +1068,19 @@ ${nameRule()}
 ${chatCtx()}
 ${first?`[이번 대화 주제 힌트] ${CHAT_TOPICS[Math.floor(Math.random()*CHAT_TOPICS.length)]} (자연스럽게, 억지로 맞추지 않아도 됨)
 [최근에 했던 첫마디 — 겹치지 않게] ${DB.chat.recent.join(' / ')||'없음'}`:`[지금까지 대화]\n${log}`}
-[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.`}
+[할 일] ${first?hn()+'(이)가 후배에게 먼저 말을 걸어.':'후배가 방금 한 말에 '+hn()+'(이)가 반응해.'}${final?' 이번 대사로 대화를 자연스럽게 마무리해. 갑자기 끊지 말고 방금 대화를 이어받아서, 상황에 맞는 한마디로 끝맺어(예: 다음을 기약하는 말, 할 일이 생각난 척 등). choices는 빈 배열, end는 true.':` 그리고 후배가 고를 대답 선택지를 3~4개 만들어. end는 false. 선택지는 후배가 선배에게 하는 말, 각 20자 이내, 위의 후배 선택지 규칙대로(편한 존댓말). 서로 결이 다르게: 다정하거나 걱정해주는 말, 선배를 살짝 놀리는 말, 맞장구나 질문, 엉뚱한 말. 그리고 그중 하나는 ${hn()}의 성격상 은근히 싫어할 만한 '함정' 대답으로 섞어(겉보기엔 평범하고 착해 보이게, 함정이라고 티 내지 말고, 순서는 랜덤). 함정 예: ${AFF_TRAP[DB.settings.hero||'miyeon']||AFF_TRAP.miyeon} 함정도 위의 후배 말투 규칙은 지켜.
+[선택지 점수] 선택지를 만들면서 각각을 ${hn()}가 들었을 때의 속마음 호감 변화를 -0.3~0.3으로 미리 매겨 aff에 넣고, 함정에는 trap:true. 기준: ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 함정은 반드시 -0.2~-0.3. 플러스는 짜게: 정말 성격에 딱 맞는 하나만 +0.15~0.3, 무난하거나 착하기만 한 말은 0~+0.05.`}
 ${loveRule()}
-${first?'':`[속마음 점수] 후배가 방금 한 말을 ${hn()}의 성격으로 받아들였을 때 속으로 느끼는 호감 변화를 -0.3~0.3 사이 숫자로 매겨 aff에 넣어. 뻔하게 착한 말이라고 무조건 플러스가 아니야. ${AFF_TASTE[DB.settings.hero||'miyeon']||AFF_TASTE.miyeon} 플러스는 짜게, 마이너스는 확실하게: 정말 성격에 딱 맞을 때만 플러스, 안 맞으면 분명히 마이너스, 무난하거나 착하기만 한 말은 0 근처. 대부분은 -0.15~+0.15 사이, 정말 마음에 들거나 싫을 때만 ±0.3에 가깝게.`}
 ${slipRule()}
 mood: 칭찬이나 설레는 말에 당황하면 "blush", 허당 실수가 드러나거나 허둥대면 "fluster", 놀림받아 발끈하면 "huff", 기분 좋으면 "smile", 그 밖엔 "normal".
-JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":["..."],"end":false${first?'':',"aff":0'}}`;}
+JSON 하나만 출력: {"line":"대사","line2":"","mood":"normal","choices":[{"t":"선택지","aff":0,"trap":false}],"end":false}`;}
 const TOUCH_RE=/손\s*(을|이|좀)?\s*(잡|줘|내밀|주세|꼭)|잡아\s*줄|안아|업어|기대(도|요|세)|팔짱|어깨(를|에)\s*(빌|기대)|뽀뽀|키스|스킨십/;
 function chatParse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;try{const v=JSON.parse(t.slice(a,b+1));
   if(!v||typeof v.line!=='string'||!v.line.trim())return null;
   v.line2=typeof v.line2==='string'?v.line2.trim():'';
-  v.choices=Array.isArray(v.choices)?v.choices.map(x=>String(x).trim()).filter(Boolean).filter(x=>!TOUCH_RE.test(x)).slice(0,4):[];
-  v.aff=Number.isFinite(+v.aff)?+v.aff:null;return v;}catch(e){return null;}}
+  v.choices=Array.isArray(v.choices)?v.choices.map(x=>{if(x&&typeof x==='object'){const t=String(x.t||x.text||'').trim(),trap=!!x.trap;let a=Number.isFinite(+x.aff)?+x.aff:0;if(trap)a=Math.min(a,-0.2);return {t,aff:a,trap};}
+      return {t:String(x).trim(),aff:0,trap:false};}).filter(c=>c.t&&!TOUCH_RE.test(c.t)).slice(0,4):[];
+  return v;}catch(e){return null;}}
 const DEMO_CHAT=[
   {line:'오늘 많이 걸었지? 보폭으로 대충 계산해 보면 2만 보는 넘었을걸. 선배 암산 정확하다?',mood:'smile',choices:['선배랑 다녀서 안 힘들었어요','그 암산… 검산해 봐도 돼요?','오늘… 사진 잘 나오겠네요. 아, 그냥요','다리에 바퀴 달고 싶어요']},
   {line:'에? 나, 나 말하는 거야? 뒤에 누구 있는 거 아니고?',mood:'blush',choices:['아, 아니 그게… 사진 얘기예요','뒤에 비둘기는 있어요','…네, 선배 말한 거예요']},
@@ -1102,7 +1103,7 @@ async function chatStep(final){const gen=C.gen;C.busy=true;
   if(gen!==C.gen||S.mode!=='chat')return;C.busy=false;
   if(!C.hist.length){DB.chat=DB.chat||{recent:[]};DB.chat.recent=[v.line,...DB.chat.recent].slice(0,5);save();}
   C.hist.push({who:'m',text:v.line+(v.line2?' '+v.line2:'')});
-  if(C.picks>0&&v.aff!=null)affJudge(v.aff);
+  if(C.pendAff!=null){affJudge(C.pendAff);C.pendAff=null;}
   v.end=final||v.choices.length<2;  // only we decide when it ends
   if(v.end)v.choices=[];chatShow(v);}
 function chatMood(m){const img=$('#charImg');img.src=m==='blush'?hero().blush:hero().img;
@@ -1113,15 +1114,15 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
     dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');C.more=null;
     const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
       if(!last){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;pi++;typeOne();};return;}
-      if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c)}</button>`).join('')+'</div>');
+      if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c.t)}</button>`).join('')+'</div>');
         dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
       else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
     C.finishTyping=done;
     C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);};
   typeOne();}
-function chatPick(t){C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(chatShouldEnd(C.picks));}
+function chatPick(c){const t=c.t;C.pendAff=c.aff;C.hist.push({who:'me',text:t});C.picks++;chatThink(t);chatStep(chatShouldEnd(C.picks));}
 function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.ended)endChat();}
-function leaveChat(){C.gen++;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
+function leaveChat(){C.gen++;C.pendAff=null;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
   $('#charImg').src=hero().img;charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
 function endChat(){leaveChat();SFX.btn();sayIdle();}
 
