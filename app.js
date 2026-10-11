@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.1.7';
+const VERSION='2.1.8';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -211,7 +211,7 @@ const mainEl=$('#main'),charEl=$('#char'),dlgWrap=$('#dlgWrap'),dlg=$('#dlg');
 
 /* ---------- heroines: same base personality + one extra trait each; picked in settings (default 미연) ---------- */
 const HEROES={
-  miyeon:{name:'미연',img:'miyeon.png',blush:'miyeon_blush.png',pos:{left:0,top:0,width:100},
+  miyeon:{name:'미연',img:'miyeon2.png',blush:'miyeon2_blush.png',pos:{left:-13.2,top:0,width:125},
     trait:'추가 속성: 천연계·모에. 순진하고 천연스러운 반응, 가끔 엉뚱한 연상으로 말이 튀어. 감정이 얼굴에 그대로 드러나.'},
   mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-8.681,top:10,width:116.054},
     trait:'출신: 일본에서 온 유학생. 한국말을 꽤 잘하고 평소엔 자연스러운 반말을 써. 일본 이야기나 일본과 한국의 차이를 가끔 자연스럽게 꺼내. 추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
@@ -1087,7 +1087,7 @@ const DEMO_CHAT=[
   {line:'헤헤, 아무튼 선배는 길 찾기 천재니까. 이 동네 골목은 에도 시대 길을 그대로 따라 나서 원래 구불구불하거든.',line2:'…어, 근데 여기 어디지?',mood:'fluster',choices:['제가 지도 볼까요?','천재… 맞죠?','같이 헤매는 것도 괜찮아요']},
   {line:'헤헤… 사실 아까부터 좀 헤맸어. 그래도 같이 걸어서 좋았어. 또 놀자!',mood:'smile',choices:[],end:true}];
 async function chatAsk(final){
-  if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];return final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};}
+  if(DB.settings.key.trim().toLowerCase()==='demo'){await sleep(500);const d=DEMO_CHAT[Math.min(C.picks,DEMO_CHAT.length-1)];const v=final||C.picks>=3?{...DEMO_CHAT[3]}:{...d};v.choices=(v.choices||[]).map(t=>({t,aff:0,trap:false}));return v;}
   const r=await gemini(chatPrompt(final),null,{tag:'chat',tools:false,timeout:20000,config:{responseMimeType:'application/json',temperature:1.0}});
   const v=chatParse(r.text);if(!v)throw new Error('대답을 못 알아들었어');return v;}
 function chatThink(meText){dlg.innerHTML=(meText?`<span class="me">“${esc(meText)}”</span>`:'')+'<span class="think"></span>';}
