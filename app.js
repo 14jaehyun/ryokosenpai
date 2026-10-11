@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.2.1';
+const VERSION='2.2.2';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1189,9 +1189,15 @@ $('#swapBtn').onclick=e=>{e.stopPropagation();if(SWAPPING)return;
 function birdOk(){return (S.mode==='idle'||S.mode==='chat')&&SCREEN==='main'&&!mainEl.classList.contains('hidden')&&!document.hidden&&!REC&&!fading
   &&!$('#overlayHost').children.length&&!charEl.classList.contains('pressed');}
 let birdT=null;
-function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{if(!window.BIRD)return;if(birdOk()){BIRD.visit({high:S.mode==='chat'});birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
+/* day: the sparrow (also drops by during a chat); night: the cat (only when you're just looking at the street) */
+const isNightNow=()=>mainEl.classList.contains('night');
+function birdLater(ms){clearTimeout(birdT);birdT=setTimeout(()=>{
+  if(isNightNow()){if(window.CAT&&birdOk()&&S.mode==='idle'){CAT.visit();birdLater(60000+Math.random()*60000);}else birdLater(20000);return;}
+  if(!window.BIRD)return;if(birdOk()){BIRD.visit({high:S.mode==='chat'});birdLater(60000+Math.random()*60000);}else birdLater(20000);},ms);}
 birdLater(60000+Math.random()*60000);
 setInterval(()=>{if(window.BIRD&&BIRD.busy&&!birdOk())BIRD.scare();},250);
+setInterval(()=>{if(window.CAT&&CAT.busy&&(!birdOk()||S.mode!=='idle'))CAT.scare();},250);
+document.addEventListener('pointerdown',()=>{if(window.CAT&&CAT.busy)CAT.scare();},{capture:true});
 document.addEventListener('pointerdown',()=>{if(window.BIRD&&BIRD.busy&&S.mode!=='chat')BIRD.scare();},{capture:true});  // tapping choices doesn't startle her
 
 /* ---------- your name (asked once; she calls you by it now and then) ---------- */
