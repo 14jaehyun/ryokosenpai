@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.3.0';
+const VERSION='2.3.1';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1268,7 +1268,7 @@ function potionTap(){const i=$('#swapBtn i');SFX.magic();
   if(i&&i.animate){const k=[];for(let f=0;f<=24;f++){const t=f/24*0.75;k.push({transform:`rotate(${(14*Math.exp(-t*5)*Math.sin(2*Math.PI*t*3.2)).toFixed(2)}deg)`});}i.animate(k,{duration:750});}
   if(document.querySelector('#rebirth'))return;
   setTimeout(()=>{const m=document.createElement('div');m.id='rebirth';
-    m.innerHTML='<div class="dim"></div><div class="box px">취향만 남기고 초기화합니다.<div class="choices"><button class="choice" data-r="1">네</button><button class="choice" data-r="0">아니요</button></div></div>';
+    m.innerHTML='<div class="dim"></div><div class="box px">취향만 남기고 다시 태어납니다.<div class="choices"><button class="choice" data-r="1">네</button><button class="choice" data-r="0">아니요</button></div></div>';
     mainEl.appendChild(m);
     m.querySelectorAll('[data-r]').forEach(b=>b.onclick=e=>{e.stopPropagation();SFX.btn();if(b.dataset.r==='1')rebirth();else m.remove();});
     m.addEventListener('pointerdown',e=>e.stopPropagation());},350);}
