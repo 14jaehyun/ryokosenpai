@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.4.2';
+const VERSION='2.4.3';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -118,10 +118,10 @@ const SFX={
   btn(){osc('square',660,660,0,0.045,0.06,0.05);osc('square',880,880,0.06,0.11,0.06,0.12);},
   /* affection: a soft "뾱" (snaps up) / "뽁" (duller, drops) with a short tail */
   affUp(){coinHit(1390,0,0.2,1,1);coinHit(1850,0.055,0.22,1,1);coinHit(2450,0.11,0.3,1,1);},   // the stat's 띠링 with one more note in front
-  affDown(){coinLow(520,470,0,0.32,1.0);coinLow(350,310,0.22,0.36,1.5);},   // 둥… 둥… two steps down
+  affDown(){blipTick(0,0.1);blipTone(830,0.09,0.27,0.06);blipTone(622,0.24,0.29,0.11);},   // 칙-뚱-둥 (라♭ → 미♭)
   /* running-total ticks: a two-hit metal "찰캉" going up, a coin bouncing to rest going down */
   coinUp(){coinHit(1850,0,0.22,1,1);coinHit(2450,0.055,0.3,1,1);},
-  coinDown(){coinLow(520,470,0,0.34,1.3);},   // one low 둥…
+  coinDown(){blipTick(0,0.1);blipTone(830,0.09,0.27,0.06);},   // 칙-뚱 (라♭)
   /* rebirth potion: a warm detuned pad that swells and rises, a wobbly "부웅~" glide, dreamy bells, a short echo */
   magic(){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const sr=a.sampleRate,n=Math.floor(sr*1.8),b=a.createBuffer(1,n,sr),o=b.getChannelData(0),T=Math.PI*2;
     const pad=[[130.8,.10],[196,.08],[261.6,.07],[329.6,.05],[392,.04]],ph=new Float64Array(pad.length*2);let gp=0;
@@ -141,6 +141,14 @@ function coinHit(f0,t0,vol,bright,decay){if(MICOPEN||AWAY)return;const a=audio()
     const o=a.createOscillator(),g=a.createGain();o.type='sine';o.frequency.value=f0*r;const v=vol*amp*0.35,d=dec*decay;
     g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(v,s+0.0015);g.gain.setTargetAtTime(0,s+0.0015,d);o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+d*6);});
   noise(t0+0.01,0.004,vol*0.4*bright,'highpass',3000);}
+/* the drop sounds: a short metallic 칙, then a clean tone that holds a moment and fades fast */
+function blipTick(t0,vol){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const s=a.currentTime+t0+0.01;
+  [[1250,1],[1910,.9],[2640,1],[3960,.6],[7700,.35]].forEach(([f,amp])=>{const o=a.createOscillator(),g=a.createGain();o.type='sine';o.frequency.value=f;
+    g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(vol*amp*0.26,s+0.002);g.gain.setTargetAtTime(0,s+0.002,0.022);o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+0.15);});}
+function blipTone(f,t0,vol,tau){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const s=a.currentTime+t0+0.01;
+  [[1,1],[2,.08]].forEach(([r,amp])=>{const o=a.createOscillator(),g=a.createGain();o.type='sine';o.frequency.value=f*r;
+    g.gain.setValueAtTime(0,s);g.gain.linearRampToValueAtTime(vol*amp,s+0.006);g.gain.setValueAtTime(vol*amp,s+0.03);g.gain.setTargetAtTime(0,s+0.03,tau);
+    o.connect(g).connect(SFXOUT);o.start(s);o.stop(s+0.03+tau*7);});}
 /* a low, muffled coin that sags a little in pitch */
 function coinLow(f0,f1,t0,vol,decay){if(MICOPEN||AWAY)return;const a=audio();if(!a||!SFXOUT)return;const s=a.currentTime+t0+0.01;
   [[1,1,0.35],[2.76,0.6,0.22],[5.40,0.08,0.12],[8.93,0.05,0.07]].forEach(([r,amp,dec])=>{
