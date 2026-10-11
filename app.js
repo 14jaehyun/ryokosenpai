@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.2.4';
+const VERSION='2.2.5';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -1149,9 +1149,9 @@ const NOISY={n:0,at:0};
 function noisyTurn(){const pos=NOISY.n%10;if(pos===0)NOISY.at=Math.floor(Math.random()*10);NOISY.n++;
   return pos===NOISY.at&&isNightNow()&&window.NEIGHBOR&&!NEIGHBOR.busy;}
 function chatPick(c){const t=c.t;C.pendAff=streakAff(c);C.hist.push({who:'me',text:t});C.picks++;chatThink(t);
-  const bye=C.leaveNext?'asked':Math.random()<1/30?'own':null;C.leaveNext=false;
+  const bye=C.leaveNext?'asked':Math.random()<1/30?'own':chatShouldEnd(C.picks)?'end':null;C.leaveNext=false;   // when she wraps up the talk, she leaves too
   C.noisy=null;if(!bye&&noisyTurn())C.noisy=sleep(450).then(()=>NEIGHBOR.show());
-  chatStep(bye?false:chatShouldEnd(C.picks),bye);}
+  chatStep(false,bye);}
 function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.byeReady){byeGo();return;}if(C.ended)endChat();}
 function byeGo(){SFX.btn();leaveChat();swapHero();}
 function chatByeNow(){C.leaveNext=false;chatThink('');chatStep(false,'now');}
@@ -1162,6 +1162,7 @@ function endChat(){if(C.byeReady){byeGo();return;}leaveChat();SFX.btn();sayIdle(
 /* ---------- heroine swap (yellow hand, top right) ---------- */
 const readMs=t=>Math.max(1600,700+String(t||'').length*70);
 function byeTask(kind){if(kind==='now')return '후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. '+hn()+'(이)가 하던 말을 멈추고, 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).';
+  if(kind==='end')return '이제 대화를 마무리할 때야. 갑자기 끊지 말고 방금 후배가 한 말을 이어받아 자연스럽게 마무리하면서, '+hn()+'의 성격대로 작별 인사를 하고 떠나(다음을 기약하는 말, 할 일이 생각난 척 등).';
   return kind==='asked'
   ?'후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. 방금 후배가 한 말에 짧게 반응하면서, '+hn()+'의 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).'
   :hn()+'(이)가 갑자기 가봐야 할 일이 생각났어. 방금 후배가 한 말에 짧게 반응하면서, 성격대로 자연스럽게 작별 인사를 하고 떠나.';}
