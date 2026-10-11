@@ -1,6 +1,6 @@
 'use strict';
 /* 여행선배 (료코센빠이) v2.0 */
-const VERSION='2.2.0';
+const VERSION='2.2.1';
 
 /* ---------- storage ---------- */
 const LS='ryokosenpai.v1';
@@ -211,11 +211,11 @@ const mainEl=$('#main'),charEl=$('#char'),dlgWrap=$('#dlgWrap'),dlg=$('#dlg');
 
 /* ---------- heroines: same base personality + one extra trait each; picked in settings (default 미연) ---------- */
 const HEROES={
-  miyeon:{name:'미연',img:'miyeon2.png',blush:'miyeon2_blush.png',pos:{left:-13.2,top:0,width:125},
+  miyeon:{name:'미연',img:'miyeon2.png',blush:'miyeon2_blush.png',blink:'miyeon2_blink.png',pos:{left:-13.2,top:0,width:125},
     trait:'추가 속성: 천연계·모에. 순진하고 천연스러운 반응, 가끔 엉뚱한 연상으로 말이 튀어. 감정이 얼굴에 그대로 드러나.'},
-  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',pos:{left:-8.681,top:10,width:116.054},
+  mizuki:{name:'미즈키',img:'hero_mz.png',blush:'hero_mz_blush.png',blink:'hero_mz_blink.png',pos:{left:-8.681,top:10,width:116.054},
     trait:'출신: 일본에서 온 유학생. 한국말을 꽤 잘하고 평소엔 자연스러운 반말을 써. 일본 이야기나 일본과 한국의 차이를 가끔 자연스럽게 꺼내. 추가 속성: 얀데레(가벼운 정도). 다정하고 상냥하지만 후배에 대한 독점욕과 질투가 은근히 있어. 후배가 다른 사람 얘기를 하면 살짝 서늘해지거나 "그 사람 누구야?"처럼 캐묻고, "나만 따라오면 돼" 같은 말을 웃으며 해. 위협·폭력·자해·감금·스토킹 같은 표현은 절대 쓰지 말고, 귀엽게 오싹한 정도까지만.'},
-  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',pos:{left:-9.194,top:10,width:118.566},
+  sujeong:{name:'수정',img:'hero_sj.png',blush:'hero_sj_blush.png',blink:'hero_sj_blink.png',pos:{left:-9.194,top:10,width:118.566},
     trait:'추가 속성: 쿨뷰티. 말수가 적고 담담하고 간결해. 감정 표현을 아끼고 문장을 짧게 끊어. 그래서 가끔 허당이 드러나거나 수줍어할 때 반전 매력이 커.'}};
 function hero(){return HEROES[DB.settings.hero]||HEROES.miyeon;}
 const hn=()=>hero().name;
@@ -260,7 +260,7 @@ function affJudge(x){const A=affOf();x=Math.max(-0.3,Math.min(0.3,Number(x)||0))
   const sgn=Math.sign(A.acc);A.acc-=sgn;let d=sgn;if(Math.random()<0.15)d*=Math.random()<0.5?2:3;
   setTimeout(()=>affBump(d),450);}
 function applyHero(){const h=hero(),img=$('#charImg');affShow();img.src=h.img;Object.assign(img.style,{left:h.pos.left+'%',top:h.pos.top+'%',width:h.pos.width+'%'});
-  const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;}
+  const t=$('#heroName');if(t)t.textContent=h.name;new Image().src=h.blush;if(h.blink)new Image().src=h.blink;}
 
 /* ---------- dialog ---------- */
 function say(html,{choices=null,cursor=true,active=false}={}){
@@ -1113,10 +1113,11 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
   const typeOne=()=>{const text=parts[pi],last=pi===parts.length-1;let i=0;
     dlg.innerHTML='<span class="tw"></span>';const sp=dlg.querySelector('.tw');C.more=null;
     const done=()=>{clearInterval(C.typing);C.typing=null;sp.textContent=text;
+      if(C.byeNow&&!v.bye){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;C.byeNow=false;chatByeNow();};return;}
       if(!last){dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');C.more=()=>{C.more=null;pi++;typeOne();};return;}
       if(v.choices.length){dlg.insertAdjacentHTML('beforeend','<div class="choices v">'+v.choices.map((c,k)=>`<button class="choice" data-k="${k}"><span class="k">${'abcd'[k]}.</span>${esc(c.t)}</button>`).join('')+'</div>');
         dlg.querySelectorAll('.choice').forEach(b=>b.onclick=e=>{e.stopPropagation();if(C.busy||S.mode!=='chat')return;b.classList.add('sel');SFX.btn();chatPick(v.choices[+b.dataset.k]);});}
-      else if(v.bye){C.ended=false;const g=C.gen;setTimeout(()=>{if(C.gen!==g||S.mode!=='chat')return;leaveChat();swapHero();},readMs(parts.join(' ')));}
+      else if(v.bye){C.ended=false;C.byeReady=true;dlg.insertAdjacentHTML('beforeend','<span class="cursor">▼</span>');}
       else{C.ended=true;dlg.insertAdjacentHTML('beforeend',(errHint?`<div class="hint">${errHint}</div>`:'')+'<span class="cursor">▼</span>');}};
     C.finishTyping=done;
     C.typing=setInterval(()=>{i++;sp.textContent=text.slice(0,i);if(i%2)osc('square',740,740,0,0.018,0.018,0.02);if(i>=text.length)done();},38);};
@@ -1124,14 +1125,17 @@ function chatShow(v,errHint){chatMood(v.mood);const parts=[v.line.trim(),v.line2
 function chatPick(c){const t=c.t;C.pendAff=c.aff;C.hist.push({who:'me',text:t});C.picks++;chatThink(t);
   const bye=C.leaveNext?'asked':Math.random()<1/30?'own':null;C.leaveNext=false;
   chatStep(bye?false:chatShouldEnd(C.picks),bye);}
-function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.ended)endChat();}
-function leaveChat(){C.gen++;C.pendAff=null;C.leaveNext=false;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
+function chatTap(){if(C.typing){C.finishTyping();return;}if(C.more){C.more();return;}if(C.byeReady){byeGo();return;}if(C.ended)endChat();}
+function byeGo(){SFX.btn();leaveChat();swapHero();}
+function chatByeNow(){C.leaveNext=false;chatThink('');chatStep(false,'now');}
+function leaveChat(){C.gen++;C.pendAff=null;C.leaveNext=false;C.byeNow=false;C.byeReady=false;C.ended=false;C.busy=false;C.more=null;if(C.typing){clearInterval(C.typing);C.typing=null;}
   $('#charImg').src=hero().img;charEl.classList.remove('fluster','huff');dlgWrap.classList.remove('big');S.mode='idle';}
-function endChat(){leaveChat();SFX.btn();sayIdle();}
+function endChat(){if(C.byeReady){byeGo();return;}leaveChat();SFX.btn();sayIdle();}
 
 /* ---------- heroine swap (yellow hand, top right) ---------- */
 const readMs=t=>Math.max(1600,700+String(t||'').length*70);
-function byeTask(kind){return kind==='asked'
+function byeTask(kind){if(kind==='now')return '후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. '+hn()+'(이)가 하던 말을 멈추고, 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).';
+  return kind==='asked'
   ?'후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. 방금 후배가 한 말에 짧게 반응하면서, '+hn()+'의 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).'
   :hn()+'(이)가 갑자기 가봐야 할 일이 생각났어. 방금 후배가 한 말에 짧게 반응하면서, 성격대로 자연스럽게 작별 인사를 하고 떠나.';}
 const BYE_FALLBACK={miyeon:'앗, 나 가봐야 할 시간이다! 재밌게 다녀와, 또 봐!',sujeong:'그럼, 난 이만. 조심히 다녀.',mizuki:'…응, 알았어. 나중에 꼭 다시 불러줘야 해?'};
@@ -1147,7 +1151,7 @@ async function byeFromIdle(){if(SWAPPING||S.mode!=='idle')return;S.mode='swap';
   say('<span class="think"></span>',{cursor:false});
   const cur=DB.settings.hero||'miyeon';
   const line=(await heroLine(cur,'후배가 손을 흔들며 오늘은 다른 선배랑 다니겠다는 뜻을 보였어. '+HEROES[cur].name+'의 성격대로 작별 인사를 해(서운함·쿨함·질투 등 성격에 맞게, 과장 없이).'))||BYE_FALLBACK[cur];
-  say(esc(line),{cursor:false});setTimeout(swapHero,readMs(line));}
+  S.mode='byeWait';say(esc(line));}
 /* shrink toward the lower right (70%), gap, fade the next one in, then her hello */
 function swapHero(){if(SWAPPING)return;SWAPPING=true;S.mode='swap';
   const cur=DB.settings.hero||'miyeon',others=Object.keys(HEROES).filter(k=>k!==cur),next=others[Math.floor(Math.random()*others.length)];
@@ -1161,11 +1165,24 @@ function swapHero(){if(SWAPPING)return;SWAPPING=true;S.mode='swap';
     setTimeout(()=>{img.style.opacity='';const fin=img.animate([{opacity:0},{opacity:1}],{duration:1250,easing:'ease-out',fill:'backwards'});fin.onfinish=done;},500);};}
 function waveHand(){const i=$('#swapBtn i');if(i&&i.animate)i.animate([{transform:'rotate(-20deg)'},{transform:'rotate(-38deg)',offset:.18},{transform:'rotate(-4deg)',offset:.42},{transform:'rotate(-32deg)',offset:.64},{transform:'rotate(-13deg)',offset:.84},{transform:'rotate(-20deg)'}],{duration:850,easing:'ease-in-out'});}
 $('#swapBtn').addEventListener('pointerdown',e=>e.stopPropagation());
+[$('#touch'),dlgWrap].forEach(el=>el.addEventListener('pointerup',()=>{if(S.mode==='byeWait'){SFX.btn();swapHero();}}));
+/* blinking: once (sometimes twice) every 2.7~9s, never while blushing or swapping */
+(function(){const img=$('#charImg');
+  function blinkOnce(){const h=hero();if(!h.blink||SWAPPING||blushing||document.hidden||!img.src.endsWith(h.img))return;
+    const dbl=Math.random()<1/6;img.src=h.blink;
+    setTimeout(()=>{if(img.src.endsWith(h.blink))img.src=h.img;
+      if(dbl)setTimeout(()=>{if(!img.src.endsWith(h.img))return;img.src=h.blink;setTimeout(()=>{if(img.src.endsWith(h.blink))img.src=h.img;},100);},130);},110);}
+  const next=()=>setTimeout(()=>{blinkOnce();next();},(1800+Math.random()*4200+(Math.random()<0.15?3000:0))*1.5);
+  next();})();
 $('#swapBtn').onclick=e=>{e.stopPropagation();if(SWAPPING)return;
   if(S.mode==='idle'){waveHand();SFX.btn();byeFromIdle();return;}
   if(S.mode==='chat'){if(C.leaveNext)return;waveHand();SFX.btn();
+    if(C.byeReady||C.byeNow)return;
     if(C.ended){leaveChat();S.mode='idle';byeFromIdle();return;}   // the talk already ended — just say goodbye
-    C.leaveNext=true;}};   // her next answer (after your pick) will be the goodbye
+    const choicesUp=!C.typing&&!C.busy&&!!dlg.querySelector('.choice');
+    if(choicesUp){C.leaveNext=true;return;}   // pick an answer → she answers with her goodbye
+    C.byeNow=true;                            // she's still talking → the next ▼ goes straight to her goodbye
+    if(C.more){C.more=()=>{C.more=null;C.byeNow=false;chatByeNow();};}}};
 
 /* ---------- sparrow visits (bird.js): every 1~2 min while you're just looking at the main screen ---------- */
 /* chatting counts as idle time too: the timer keeps running and she can drop by (landing above the big box) */
